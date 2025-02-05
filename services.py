@@ -128,26 +128,26 @@ async def fetch_comments_and_replies(id: str):
 
 async def update_Comment_Reply(id:str, text:str):
     #First search in comments collection
-    comment = await collection_comment.find_one({"comment_id": id})
+    comment = await collection_comment.find_one({"_id": id})
     if comment:
         result = await collection_comment.update_one(
-            {"comment_id": id},
+            {"_id": id},
             {"$set": {"text": text}}
         )
         if result.modified_count == 1:
-            updated_comment = await collection_comment.find_one({"comment_id": id})
+            updated_comment = await collection_comment.find_one({"_id": id})
             return updated_comment
         raise HTTPException(400, "Comment update failed")
     
     #If it is not in comment collection, then search in reply collection
-    reply = await collection_reply.find_one({"reply_id":id})
+    reply = await collection_reply.find_one({"_id":id})
     if reply:
         result = await collection_reply.update_one(
-            {"reply_id":id},
+            {"_id":id},
             {"$set": {"text":text}}
         )
         if result.modified_count == 1:
-            updated_reply = await collection_reply.find_one({"reply_id": id})
+            updated_reply = await collection_reply.find_one({"_id": id})
             return updated_reply
         raise HTTPException(400, "Reply update failed")
     
@@ -155,9 +155,9 @@ async def update_Comment_Reply(id:str, text:str):
 
 async def delete_comment_reply(id):
     #First search in comments collection
-    comment = await collection_comment.find_one({"comment_id": id})
+    comment = await collection_comment.find_one({"_id": id})
     if comment:
-        result = await collection_comment.delete_one({'comment_id': id})
+        result = await collection_comment.delete_one({'_id': id})
 
         # Delete all replies associated with the comment
         result_ = await collection_reply.delete_many({'parentContent_id': id})
@@ -166,9 +166,9 @@ async def delete_comment_reply(id):
         return {"message": "Comment deleted successfully"}
     
     #If it is not in comment collection, then search in reply collection
-    reply = await collection_reply.find_one({"reply_id":id})
+    reply = await collection_reply.find_one({"_id":id})
     if reply:
-        result = await collection_reply.delete_one({'reply_id': id})
+        result = await collection_reply.delete_one({'_id': id})
 
         # Delete all replies associated with the reply
         result_ = await collection_reply.delete_many({'parentContent_id': id})

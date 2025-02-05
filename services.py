@@ -32,7 +32,7 @@ async def create_blog(blog):
     raise HTTPException(400, "Blog Insertion failed")
 
 
-async def update_blog(id, title, content):
+async def update_blog(id, title, content, tags):
     # try:
     #     objId = ObjectId(id)
     # except:
@@ -40,7 +40,7 @@ async def update_blog(id, title, content):
     # id type changed to str, so just store as str 
     result = await collection_blog.update_one(
         {"_id":id}, #objID to id and also blogPost_id to _id because in models.py ,"blogPost_id" changed to "_id" by  " alias="_id" "
-        {"$set":{"title":title, "content":content}}
+        {"$set":{"title":title, "content":content, "tags":tags}}
     )
 
     if result.modified_count == 1:
@@ -125,3 +125,55 @@ async def fetch_comments_and_replies(id: str):
         comment.replies = await fetch_replies(comment.comment_id)#added an attribute to the model.py "Comment" to store replies since comment.replies called here
     
     return comments
+
+async def update_Comment_Reply(id:str, text:str):
+    #First search in comments collection
+    comment = await collection_comment.find_one({"_id": id})
+    if comment:
+        result = await collection_comment.update_one(
+            {"_id": id},
+            {"$set": {"text": text}}
+        )
+        if result.modified_count == 1:
+            updated_comment = await collection_comment.find_one({"_id": id})
+            return updated_comment
+        raise HTTPException(400, "Comment update failed")
+    
+    #If it is not in comment collection, then search in reply collection
+    reply = await collection_reply.find_one({"_id":id})
+    if reply:
+        result = await collection_reply.update_one(
+            {"_id":id},
+            {"$set": {"text":text}}
+        )
+        if result.modified_count == 1:
+            updated_reply = await collection_reply.find_one({"_id": id})
+            return updated_reply
+        raise HTTPException(400, "Reply update failed")
+    
+    raise HTTPException(404, "Comment or Reply not found")
+
+async def delete_comment_reply(id):
+    #First search in comments collection
+    comment = await collection_comment.find_one({"_id": id})
+    if comment:
+        result = await collection_comment.delete_one({'_id': id})
+
+        # Delete all replies associated with the comment
+        result_ = await collection_reply.delete_many({'parentContent_id': id})
+        if result.deleted_count == 0:
+            raise HTTPException(400, "Comment deletion failed")
+        return {"message": "Comment deleted successfully"}
+    
+    #If it is not in comment collection, then search in reply collection
+    reply = await collection_reply.find_one({"_id":id})
+    if reply:
+        result = await collection_reply.delete_one({'_id': id})
+
+        # Delete all replies associated with the reply
+        result_ = await collection_reply.delete_many({'parentContent_id': id})
+        if result.deleted_count == 0:
+            raise HTTPException(400, "Reply deletion failed")
+        return {"message": "Reply deleted successfully"}
+    
+    raise HTTPException(404, "Comment or Reply not found")

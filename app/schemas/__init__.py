@@ -1,3 +1,3 @@
-from app.schemas.blog import Blog, BlogCreate, BlogUpdate
+from app.schemas.blog import BlogPost, Comment, Reply
 
-__all__ = ["Blog", "BlogCreate", "BlogUpdate"] 
+__all__ = ["BlogPost", "Comment", "Reply"] 

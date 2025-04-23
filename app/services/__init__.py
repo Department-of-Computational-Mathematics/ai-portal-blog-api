@@ -1,3 +1,3 @@
-from app.services.blog import get_blog, get_blogs, create_blog, update_blog, delete_blog
+from app.services.blog import get_blog_by_id, create_blog, update_blog, write_comment, reply_comment, get_all_blogs, delete_blog_by_id, get_blogs_byTags, fetch_replies, fetch_comments_and_replies, update_Comment_Reply, delete_comment_reply
 
-__all__ = ["get_blog", "get_blogs", "create_blog", "update_blog", "delete_blog"] 
+__all__ = ["get_blog_by_id", "create_blog", "update_blog", "write_comment", "reply_comment", "get_all_blogs", "delete_blog_by_id", "get_blogs_byTags", "fetch_replies", "fetch_comments_and_replies", "update_Comment_Reply", "delete_comment_reply"] 

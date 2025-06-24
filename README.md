@@ -4,7 +4,7 @@ A modern blog API built with FastAPI, MongoDB, and Pydantic.
 
 ## Project Structure
 
-```
+```plaintext
 app/
 ├── api/                    # API endpoints
 │   └── v1/
@@ -30,26 +30,30 @@ app/
 ## Setup
 
 1. Create a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
+
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # On Windows: venv\Scripts\activate
+    ```
 
 2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+
+    ```bash
+    pip install -r requirements.txt
+    ```
 
 3. Run the application:
-```bash
-uvicorn app.main:app --reload
-```
+
+    ```bash
+    uvicorn app.main:app --reload
+    ```
 
 ## API Documentation
 
 Once the application is running, you can access:
-- Interactive API documentation: http://localhost:8000/docs
-- Alternative API documentation: http://localhost:8000/redoc
+
+- Interactive API documentation: <http://localhost:8000/docs>
+- Alternative API documentation: <http://localhost:8000/redoc>
 
 ## Features
 

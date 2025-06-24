@@ -6,6 +6,14 @@ from app.core.security import get_current_user_id
 
 router = APIRouter()
 
+# Health check endpoint for blog service
+@router.get("/health", tags=["Health"], summary="Blog Service Health Check")
+async def blog_service_health():
+    return {
+        "service": "blog-service",
+        "status": "healthy",
+    }
+
 @router.get("/blog/{blog_id}", tags=["Blog", "Unauthenticated"], summary="Get Blog by ID")
 async def get_blog_by_blog_id(blog_id: str): #data type change from int to str
     blog = await get_blog_by_id(blog_id) #{"p_id": blog_id} => blog_id -function parameter error,parameter was not in format used in get_blog_by_id()

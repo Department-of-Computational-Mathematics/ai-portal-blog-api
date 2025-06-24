@@ -27,22 +27,23 @@ async def create_blog(blog):
     raise HTTPException(400, "Blog Insertion failed")
 
 
-async def update_blog(id, title, content, tags):
-    # try:
-    #     objId = ObjectId(id)
-    # except:
-    #     raise HTTPException(400, "Invalid Id format")
-    # id type changed to str, so just store as str 
+async def update_blog(id, title, content, tags, user_id: str):
+    # First check if blog exists and user owns it
+    blog = await collection_blog.find_one({"_id": id})
+    if not blog:
+        raise HTTPException(404, "Blog not found")
+    
+    if blog["user_id"] != user_id:
+        raise HTTPException(403, "Permission denied. You can only edit your own blogs.")
+    
     result = await collection_blog.update_one(
-        {"_id":id}, #objID to id and also blogPost_id to _id because in models.py ,"blogPost_id" changed to "_id" by  " alias="_id" "
+        {"_id":id}, 
         {"$set":{"title":title, "content":content, "tags":tags}}
     )
 
     if result.modified_count == 1:
-        blog = await collection_blog.find_one({"_id":id}) #objID to id also blogPost_id to _id because in models.py ,"blogPost_id" changed to "_id" by  " alias="_id" "
-        return blog
-    elif result.modified_count == 0:
-        raise HTTPException(404, "Blog not found")
+        updated_blog = await collection_blog.find_one({"_id":id})
+        return updated_blog
     
     raise HTTPException(400, "Blog update failed")
 
@@ -76,11 +77,27 @@ async def get_all_blogs():
     return blogs
     
 
-async def delete_blog_by_id(id: str):
-    result = await collection_blog.delete_one({'_id': id}) #_id,  because in models.py ,"blogPost_id" changed to "_id" by  " alias="_id" "
+async def delete_blog_by_id(id: str, user_id: str):
+    # First check if blog exists and user owns it
+    blog = await collection_blog.find_one({"_id": id})
+    if not blog:
+        raise HTTPException(status_code=404, detail=f"Blog with id {id} not found")
+    
+    if blog["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Permission denied. You can only delete your own blogs.")
+    
+    result = await collection_blog.delete_one({'_id': id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail=f"Blog with id {id} not found")
-    return {"message": "Blog deleted successfully"}
+    
+    # Also delete all comments and replies associated with this blog
+    await collection_comment.delete_many({"blogPost_id": id})
+    # Get all comment IDs for this blog to delete their replies
+    comment_ids = [comment["_id"] async for comment in collection_comment.find({"blogPost_id": id})]
+    if comment_ids:
+        await collection_reply.delete_many({"parentContent_id": {"$in": comment_ids}})
+    
+    return {"message": "Blog and associated comments deleted successfully"}
 
 async def get_blogs_byTags(tags : List[int]):
     blogs=[]
@@ -121,10 +138,14 @@ async def fetch_comments_and_replies(id: str):
     
     return comments
 
-async def update_Comment_Reply(id:str, text:str):
-    #First search in comments collection
+async def update_Comment_Reply(id: str, text: str, user_id: str):
+    # First search in comments collection
     comment = await collection_comment.find_one({"_id": id})
     if comment:
+        # Check if user owns this comment
+        if comment["user_id"] != user_id:
+            raise HTTPException(403, "Permission denied. You can only edit your own comments.")
+        
         result = await collection_comment.update_one(
             {"_id": id},
             {"$set": {"text": text}}
@@ -134,12 +155,16 @@ async def update_Comment_Reply(id:str, text:str):
             return updated_comment
         raise HTTPException(400, "Comment update failed")
     
-    #If it is not in comment collection, then search in reply collection
-    reply = await collection_reply.find_one({"_id":id})
+    # If it is not in comment collection, then search in reply collection
+    reply = await collection_reply.find_one({"_id": id})
     if reply:
+        # Check if user owns this reply
+        if reply["user_id"] != user_id:
+            raise HTTPException(403, "Permission denied. You can only edit your own replies.")
+        
         result = await collection_reply.update_one(
-            {"_id":id},
-            {"$set": {"text":text}}
+            {"_id": id},
+            {"$set": {"text": text}}
         )
         if result.modified_count == 1:
             updated_reply = await collection_reply.find_one({"_id": id})
@@ -148,27 +173,35 @@ async def update_Comment_Reply(id:str, text:str):
     
     raise HTTPException(404, "Comment or Reply not found")
 
-async def delete_comment_reply(id):
-    #First search in comments collection
+async def delete_comment_reply(id: str, user_id: str):
+    # First search in comments collection
     comment = await collection_comment.find_one({"_id": id})
     if comment:
+        # Check if user owns this comment
+        if comment["user_id"] != user_id:
+            raise HTTPException(403, "Permission denied. You can only delete your own comments.")
+        
         result = await collection_comment.delete_one({'_id': id})
-
         # Delete all replies associated with the comment
-        result_ = await collection_reply.delete_many({'parentContent_id': id})
+        await collection_reply.delete_many({'parentContent_id': id})
+        
         if result.deleted_count == 0:
             raise HTTPException(400, "Comment deletion failed")
-        return {"message": "Comment deleted successfully"}
+        return {"message": "Comment and associated replies deleted successfully"}
     
-    #If it is not in comment collection, then search in reply collection
-    reply = await collection_reply.find_one({"_id":id})
+    # If it is not in comment collection, then search in reply collection
+    reply = await collection_reply.find_one({"_id": id})
     if reply:
+        # Check if user owns this reply
+        if reply["user_id"] != user_id:
+            raise HTTPException(403, "Permission denied. You can only delete your own replies.")
+        
         result = await collection_reply.delete_one({'_id': id})
-
-        # Delete all replies associated with the reply
-        result_ = await collection_reply.delete_many({'parentContent_id': id})
+        # Delete all replies associated with the reply (nested replies)
+        await collection_reply.delete_many({'parentContent_id': id})
+        
         if result.deleted_count == 0:
             raise HTTPException(400, "Reply deletion failed")
-        return {"message": "Reply deleted successfully"}
+        return {"message": "Reply and nested replies deleted successfully"}
     
     raise HTTPException(404, "Comment or Reply not found")

@@ -2,32 +2,66 @@ import json
 from fastapi import HTTPException
 from bson import json_util
 from app.db.database import collection_blog, collection_comment, collection_reply
-from app.schemas.blog import BlogPost, Comment, Reply
+from app.schemas.blog import BlogPost, Comment, Reply, BlogPostWithUserData, AllBlogsBlogPost
 from typing import List
 
+CONTENT_PREVIEW_LENGTH = 150  # Length of content preview for AllBlogsBlogPost
 
-async def get_blog_by_id(entity_id: str): #data type changed from int to str
+def convert_mongo_doc_to_dict(doc):
+    """Convert MongoDB document to dict compatible with Pydantic models"""
+    if doc is None:
+        return None
+    
+    # Convert ObjectId and other MongoDB types to string/dict
+    doc_dict = json.loads(json_util.dumps(doc))
+    
+    # Convert MongoDB datetime format to ISO string
+    if 'postedAt' in doc_dict and isinstance(doc_dict['postedAt'], dict) and '$date' in doc_dict['postedAt']:
+        doc_dict['postedAt'] = doc_dict['postedAt']['$date']
+    
+    if 'commentedAt' in doc_dict and isinstance(doc_dict['commentedAt'], dict) and '$date' in doc_dict['commentedAt']:
+        doc_dict['commentedAt'] = doc_dict['commentedAt']['$date']
+        
+    if 'repliedAt' in doc_dict and isinstance(doc_dict['repliedAt'], dict) and '$date' in doc_dict['repliedAt']:
+        doc_dict['repliedAt'] = doc_dict['repliedAt']['$date']
+    
+    return doc_dict
+
+async def get_blog_by_id(entity_id: str) -> BlogPostWithUserData: #data type changed from int to str
     try:
         entity = await collection_blog.find_one({"_id": entity_id}) #blogPost_id to _id , becaue in models.py ,"blogPost_id" changed to "_id" by  " alias="_id" "
         if entity is None:
-            return {"message": f"Blog with id {entity_id} not found"}
-        else:
-            json_data = json.loads(json_util.dumps(entity))
-            return json_data
+            raise HTTPException(status_code=404, detail=f"Blog with id {entity_id} not found")
+        
+        # Convert MongoDB document to BlogPostWithUserData
+        blog_data = convert_mongo_doc_to_dict(entity)
+        if blog_data is None:
+            raise HTTPException(status_code=404, detail=f"Blog with id {entity_id} not found")
+        
+        # Add dummy user data (to be populated later with actual user service logic)
+        blog_data["user_display_name"] = "dummy_user"
+        blog_data["user_image"] = "https://picsum.photos/200"
+        return BlogPostWithUserData(**blog_data)
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"An error occurred: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-async def create_blog(blog):
+async def create_blog(blog) -> BlogPostWithUserData:
     blog_dict = blog.dict(by_alias=True) # added this part because dictionary data type should be used for insert_one as parametre
     result = await collection_blog.insert_one(blog_dict)
     if result.inserted_id:
-        return blog
+        # Convert BlogPost to BlogPostWithUserData for response
+        blog_data = blog.dict()
+        blog_data["user_display_name"] = "dummy_user"
+        blog_data["user_image"] = "https://picsum.photos/200"
+        return BlogPostWithUserData(**blog_data)
     raise HTTPException(400, "Blog Insertion failed")
 
 
-async def update_blog(id, title, content, tags, user_id: str):
+async def update_blog(id, title, content, tags, user_id: str) -> BlogPostWithUserData:
     # First check if blog exists and user owns it
     blog = await collection_blog.find_one({"_id": id})
     if not blog:
@@ -43,7 +77,13 @@ async def update_blog(id, title, content, tags, user_id: str):
 
     if result.modified_count == 1:
         updated_blog = await collection_blog.find_one({"_id":id})
-        return updated_blog
+        # Convert to BlogPostWithUserData
+        blog_data = convert_mongo_doc_to_dict(updated_blog)
+        if blog_data is None:
+            raise HTTPException(400, "Blog update failed")
+        blog_data["user_display_name"] = "dummy_user"
+        blog_data["user_image"] = "https://picsum.photos/200"
+        return BlogPostWithUserData(**blog_data)
     
     raise HTTPException(400, "Blog update failed")
 
@@ -64,20 +104,32 @@ async def reply_comment(reply):
 
 
 
-async def get_all_blogs():
+async def get_all_blogs() -> List[AllBlogsBlogPost]:
     # function need to be async to use 'async for' loop
     blogs = []
     cursor = collection_blog.find({})
     async for blog in cursor:
-        blog["blogPost_id"] = str(blog["_id"])
-        del blog["_id"]
-        blogs.append(blog)
+        # Convert BlogPost to AllBlogsBlogPost
+        blog_data = {
+            "blogPost_id": str(blog["_id"]),
+            "comment_constraint": blog["comment_constraint"],
+            "tags": blog["tags"],
+            "number_of_views": blog["number_of_views"],
+            "title": blog["title"],
+            "content_preview": blog["content"][:CONTENT_PREVIEW_LENGTH] + "..." if len(blog["content"]) > 200 else blog["content"],  # Create preview from content
+            "postedAt": blog["postedAt"],
+            "post_image": blog.get("post_image"),
+            "user_id": blog.get("user_id"),
+            "user_display_name": "dummy_user",  # Dummy data
+            "user_image": "https://picsum.photos/200"  # Dummy data
+        }
+        blogs.append(AllBlogsBlogPost(**blog_data))
     if len(blogs) == 0:
         raise HTTPException(404, "No blogs found")
     return blogs
     
 
-async def delete_blog_by_id(id: str, user_id: str):
+async def delete_blog_by_id(id: str, user_id: str) -> BlogPostWithUserData:
     # First check if blog exists and user owns it
     blog = await collection_blog.find_one({"_id": id})
     if not blog:
@@ -85,6 +137,14 @@ async def delete_blog_by_id(id: str, user_id: str):
     
     if blog["user_id"] != user_id:
         raise HTTPException(status_code=403, detail="Permission denied. You can only delete your own blogs.")
+    
+    # Store blog data before deletion for return
+    blog_data = convert_mongo_doc_to_dict(blog)
+    if blog_data is None:
+        raise HTTPException(status_code=404, detail=f"Blog with id {id} not found")
+    blog_data["user_display_name"] = "dummy_user"
+    blog_data["user_image"] = "https://picsum.photos/200"
+    deleted_blog = BlogPostWithUserData(**blog_data)
     
     result = await collection_blog.delete_one({'_id': id})
     if result.deleted_count == 0:
@@ -97,25 +157,42 @@ async def delete_blog_by_id(id: str, user_id: str):
     if comment_ids:
         await collection_reply.delete_many({"parentContent_id": {"$in": comment_ids}})
     
-    return {"message": "Blog and associated comments deleted successfully"}
+    return deleted_blog
 
-async def get_blogs_byTags(tags : List[int]):
+async def get_blogs_byTags(tags : List[int]) -> List[AllBlogsBlogPost]:
     blogs=[]
     if await collection_blog.count_documents({"tags": {"$in": tags}}) == 0: # await added because httpException didnt work due to have no enough time to count.
         raise HTTPException(status_code=404, detail="no blogs found with the given tags.")
     cursor=collection_blog.find({"tags": {"$in": tags}}) 
     async for document in cursor: # added async
-        blogs.append(BlogPost(**document))
+        # Convert BlogPost to AllBlogsBlogPost
+        blog_data = {
+            "blogPost_id": str(document["_id"]),
+            "comment_constraint": document["comment_constraint"],
+            "tags": document["tags"],
+            "number_of_views": document["number_of_views"],
+            "title": document["title"],
+            "content_preview": document["content"][:CONTENT_PREVIEW_LENGTH] + "..." if len(document["content"]) > 200 else document["content"],  # Create preview from content
+            "postedAt": document["postedAt"],
+            "post_image": document.get("post_image"),
+            "user_id": document.get("user_id"),
+            "user_display_name": "dummy_user",  # Dummy data
+            "user_image": "https://picsum.photos/200"  # Dummy data
+        }
+        blogs.append(AllBlogsBlogPost(**blog_data))
     return blogs
 
 
 async def fetch_replies(parent_content_id: str): #uuid to str ,models.py -> blogPost_id changed from uuid to str
     replies_cursor = collection_reply.find({"parentContent_id": parent_content_id}) #await removed, TypeError: object AsyncIOMotorCursor can't be used in 'await' expression 
-    replies = [Reply(**reply) async for reply in replies_cursor]
-    
-    # Recursively fetch replies for each reply
-    for reply in replies:
-        reply.replies = await fetch_replies(reply.reply_id) #added an attribute to the model.py -> "Reply" to store replies since reply.replies called here
+    replies = []
+    async for reply in replies_cursor:
+        reply_data = convert_mongo_doc_to_dict(reply)
+        if reply_data:
+            reply_obj = Reply(**reply_data)
+            # Recursively fetch replies for each reply
+            reply_obj.replies = await fetch_replies(reply_obj.reply_id)
+            replies.append(reply_obj)
     
     return replies
 
@@ -127,15 +204,18 @@ async def fetch_comments_and_replies(id: str):
     #     raise HTTPException(400, "Invalid Id format")
      # id type changed to str, so just store as str 
     comments_cursor = collection_comment.find({"blogPost_id": id}) #objid to id , await removed - TypeError: object AsyncIOMotorCursor can't be used in 'await' expression 
-    comments = [Comment(**comment) async for comment in comments_cursor]
+    comments = []
+    async for comment in comments_cursor:
+        comment_data = convert_mongo_doc_to_dict(comment)
+        if comment_data:
+            comment_obj = Comment(**comment_data)
+            # Fetch replies for each comment
+            comment_obj.replies = await fetch_replies(comment_obj.comment_id)
+            comments.append(comment_obj)
     
     if len(comments)==0 :
         raise HTTPException(404, "Comments not found")
         
-    # Fetch replies for each comment
-    for comment in comments:
-        comment.replies = await fetch_replies(comment.comment_id)#added an attribute to the model.py "Comment" to store replies since comment.replies called here
-    
     return comments
 
 async def update_Comment_Reply(id: str, text: str, user_id: str):
@@ -152,7 +232,8 @@ async def update_Comment_Reply(id: str, text: str, user_id: str):
         )
         if result.modified_count == 1:
             updated_comment = await collection_comment.find_one({"_id": id})
-            return updated_comment
+            comment_data = convert_mongo_doc_to_dict(updated_comment)
+            return Comment(**comment_data) if comment_data else None
         raise HTTPException(400, "Comment update failed")
     
     # If it is not in comment collection, then search in reply collection
@@ -168,7 +249,8 @@ async def update_Comment_Reply(id: str, text: str, user_id: str):
         )
         if result.modified_count == 1:
             updated_reply = await collection_reply.find_one({"_id": id})
-            return updated_reply
+            reply_data = convert_mongo_doc_to_dict(updated_reply)
+            return Reply(**reply_data) if reply_data else None
         raise HTTPException(400, "Reply update failed")
     
     raise HTTPException(404, "Comment or Reply not found")

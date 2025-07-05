@@ -54,7 +54,7 @@ async def writeComment(comment: Comment, current_user_id: str = Depends(get_curr
     comment.user_id = current_user_id
     return await write_comment(comment)
 
-@router.post('/reply-comment', response_model=Reply, tags=["Blog-Comment", "Authenticated"], summary="Reply to a comment on a blog post")
+@router.post('/reply-comment', response_model=ReplyBase, tags=["Blog-Comment", "Authenticated"], summary="Reply to a comment on a blog post")
 async def replyComment(reply: Reply, current_user_id: str = Depends(get_current_user_id)):
     # Server side setting - more secure
     reply.user_id = current_user_id

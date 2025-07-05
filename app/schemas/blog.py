@@ -25,7 +25,7 @@ class CommentBase(BaseModel):
     replies: List['ReplyBase'] = []
 
 class ReplyBase(BaseModel):
-    reply_id: str = Field(alias="_id")  # No default_factory, expects existing ID
+    reply_id: str = Field(alias="_id", serialization_alias="reply_id")  # No default_factory, expects existing ID
     parentContent_id: str
     user_id: Optional[str] = None
     text: str
@@ -54,7 +54,7 @@ class Comment(BaseModel):
 
 class Reply(BaseModel):
     reply_id: str = Field(default_factory=lambda: str(uuid4()), alias="_id")
-    parentContent_id: str
+    parentContent_id: str #UUID to str ,either a comment_id or reply_id (when someone reply to an existing reply)
     user_id: Optional[str] = None
     text: str
     repliedAt: datetime = Field(default_factory=datetime.utcnow)

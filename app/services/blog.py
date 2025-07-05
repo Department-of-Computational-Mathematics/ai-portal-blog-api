@@ -127,7 +127,7 @@ async def reply_comment(reply):
         # Return the reply from database to match response model expectations
         created_reply = await collection_reply.find_one({"_id": reply_dict["_id"]})
         reply_data = convert_mongo_doc_to_dict(created_reply)
-        return Reply(**reply_data) if reply_data else None
+        return ReplyBase(**reply_data) if reply_data else None
     raise HTTPException(400, "Reply Insertion failed")
 
 
@@ -218,7 +218,7 @@ async def fetch_replies(parent_content_id: str): #uuid to str ,models.py -> blog
         reply_data = convert_mongo_doc_to_dict(reply)
         if reply_data:
             reply_obj = ReplyBase(**reply_data)
-            # Recursively fetch replies for each reply
+            # Recursively fetch replies for each reply TODO: Any way to limit recursion depth or avoid recursion all together?
             reply_obj.replies = await fetch_replies(reply_obj.reply_id)
             replies.append(reply_obj)
     

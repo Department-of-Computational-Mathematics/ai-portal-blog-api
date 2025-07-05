@@ -6,7 +6,7 @@ from datetime import datetime
 
 # Base schemas without auto-generated IDs (for reading from DB)
 class BlogPostBase(BaseModel): 
-    blogPost_id: str = Field(alias="_id")  # No default_factory, expects existing ID
+    blogPost_id: str = Field(alias="_id", serialization_alias="blog_id")  # No default_factory, expects existing ID
     comment_constraint: bool
     tags: List[int]
     number_of_views: int
@@ -66,7 +66,7 @@ class BlogPostWithUserData(BlogPostBase):
     user_image: Optional[str] = None
 
 class AllBlogsBlogPost(BaseModel): 
-    blogPost_id: str = Field(alias="_id")  # No default_factory, expects existing ID
+    blogPost_id: str = Field(alias="_id", serialization_alias="blog_id")  # No default_factory, expects existing ID
     comment_constraint: bool
     tags: List[int]
     number_of_views: int
@@ -77,3 +77,5 @@ class AllBlogsBlogPost(BaseModel):
     user_id: Optional[str] = None
     user_display_name: Optional[str]
     user_image: Optional[str] = None
+
+# NOTE: alias is input for serialization, serialization_alias is output for serialization.

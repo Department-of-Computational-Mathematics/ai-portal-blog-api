@@ -54,7 +54,7 @@ async def create_blog(blog) -> BlogPostWithUserData:
     result = await collection_blog.insert_one(blog_dict)
     if result.inserted_id:
         # Convert BlogPost to BlogPostWithUserData for response
-        blog_data = blog.dict()
+        blog_data = blog.dict(by_alias=True)  # Use by_alias=True to get _id instead of blogPost_id
         blog_data["user_display_name"] = "dummy_user"
         blog_data["user_image"] = "https://picsum.photos/200"
         return BlogPostWithUserData(**blog_data)

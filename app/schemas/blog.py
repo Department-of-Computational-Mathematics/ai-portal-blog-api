@@ -1,4 +1,3 @@
-  
 from pydantic import BaseModel, Field
 from uuid import uuid4
 from typing import List, Optional
@@ -59,6 +58,10 @@ class Reply(BaseModel):
     text: str
     repliedAt: datetime = Field(default_factory=datetime.utcnow)
     replies: List['Reply'] = []
+
+# Request models for updating content
+class UpdateTextRequest(BaseModel):
+    text: str
 
 # Response schemas extending base schemas
 class BlogPostWithUserData(BlogPostBase):

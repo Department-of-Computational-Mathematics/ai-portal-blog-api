@@ -61,22 +61,29 @@ async def create_blog(blog) -> BlogPostWithUserData:
     raise HTTPException(400, "Blog Insertion failed")
 
 
-async def update_blog(id, title, content, tags, user_id: str) -> BlogPostWithUserData:
+async def update_blog(blog) -> BlogPostWithUserData:
+    blog_dict = blog.dict(by_alias=True) 
     # First check if blog exists and user owns it
-    blog = await collection_blog.find_one({"_id": id})
-    if not blog:
+    old_blog = await collection_blog.find_one({"_id": blog_dict["_id"]}) #blogPost_id to _id , becaue in models.py ,"blogPost_id" changed to "_id" by  " alias="_id" "
+    if not old_blog:
         raise HTTPException(404, "Blog not found")
     
-    if blog["user_id"] != user_id:
+    if old_blog["user_id"] != blog_dict["user_id"]:
         raise HTTPException(403, "Permission denied. You can only edit your own blogs.")
     
     result = await collection_blog.update_one(
-        {"_id":id}, 
-        {"$set":{"title":title, "content":content, "tags":tags}}
+        {"_id": blog_dict["_id"]}, 
+        {"$set": {
+            "title": blog_dict["title"], 
+            "content": blog_dict["content"], 
+            "tags": blog_dict["tags"],
+            "comment_constraint": blog_dict.get("comment_constraint", False),  # Optional field
+            "postImage": blog_dict.get("post_image", None)  # Optional field
+        }}
     )
 
     if result.modified_count == 1:
-        updated_blog = await collection_blog.find_one({"_id":id})
+        updated_blog = await collection_blog.find_one({"_id": blog_dict["_id"]})
         # Convert to BlogPostWithUserData
         blog_data = convert_mongo_doc_to_dict(updated_blog)
         if blog_data is None:

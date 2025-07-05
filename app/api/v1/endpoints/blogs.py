@@ -26,8 +26,10 @@ async def createBlog(blog: BlogPost, current_user_id: str = Depends(get_current_
     return await create_blog(blog)
 
 @router.put('/updateblog/{id}', response_model=BlogPostWithUserData, tags=["Blog", "Authenticated"], summary="Update an existing blog post")
-async def updateBlog(id: str, title: str, content: str, tags: List[int] = Query(...), current_user_id: str = Depends(get_current_user_id)):
-    return await update_blog(id, title, content, tags, current_user_id)
+async def updateBlog(id: str, blog: BlogPost, current_user_id: str = Depends(get_current_user_id)):
+    blog.user_id = current_user_id  # Ensure the user_id is set from the server-side
+    blog.blogPost_id = id  # Set the blog ID from the path parameter
+    return await update_blog(blog)
 
 @router.post('/write-comment', response_model=Comment, tags=["Blog-Comment", "Authenticated"], summary="Write a comment on a blog post")
 async def writeComment(comment: Comment, current_user_id: str = Depends(get_current_user_id)):

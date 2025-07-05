@@ -4,46 +4,76 @@ from uuid import uuid4
 from typing import List, Optional
 from datetime import datetime
 
-class BlogPost(BaseModel): #represents a single blog post
-    blogPost_id: str = Field(default_factory=lambda: str(uuid4()), alias="_id")    #blogPost_id:UUID = Field(default_factory=uuid4, alias="_id") #primary key
-    comment_constraint:bool #whether commenting is enabled or not, if enabled then true
-    tags:List[int]  # List of integers indicating relavant tags (topics)
-    number_of_views:int
-    title:str #topic of the blog
-    content:str #content of the blog : just texts here, didnt handle images/videos in the blog post
-    postedAt:datetime = Field(default_factory=datetime.utcnow) #posted date time -utc time
-    post_image: Optional[str] = None  # Optional image URL for the blog post, can be null if no image is provided
-    user_id: Optional[str] = None   #UUID to str ,author`s user_id - Optional for request, set server-side
+# Base schemas without auto-generated IDs (for reading from DB)
+class BlogPostBase(BaseModel): 
+    blogPost_id: str = Field(alias="_id")  # No default_factory, expects existing ID
+    comment_constraint: bool
+    tags: List[int]
+    number_of_views: int
+    title: str
+    content: str
+    postedAt: datetime
+    post_image: Optional[str] = None
+    user_id: Optional[str] = None
 
-class BlogPostWithUserData(BlogPost):
-    user_display_name: Optional[str]  # Username of the author, can be null if not provided
-    user_image: Optional[str] = None  # Optional image URL for the author, can be null if no image is provided
+class CommentBase(BaseModel):
+    comment_id: str = Field(alias="_id")  # No default_factory, expects existing ID
+    user_id: Optional[str] = None
+    blogPost_id: str
+    text: str
+    commentedAt: datetime
+    replies: List['ReplyBase'] = []
 
-class AllBlogsBlogPost(BaseModel): #represents a single blog post with only essential fields for listing
-    blogPost_id: str = Field(default_factory=lambda: str(uuid4()), alias="_id")    #blogPost_id:UUID = Field(default_factory=uuid4, alias="_id") #primary key
-    comment_constraint:bool #whether commenting is enabled or not, if enabled then true
-    tags:List[int]  # List of integers indicating relavant tags (topics)
-    number_of_views:int
-    title:str #topic of the blog
-    content_preview:str # content preview of the blog, just texts here, didnt handle images/videos in the blog post
-    postedAt:datetime = Field(default_factory=datetime.utcnow) #posted date time -utc time
-    post_image: Optional[str] = None  # Optional image URL for the blog post, can be null if no image is provided
-    user_id: Optional[str] = None   #UUID to str ,author`s user_id - Optional for request, set server-side
-    user_display_name: Optional[str]  # Username of the author, can be null if not provided
-    user_image: Optional[str] = None  # Optional image URL for the author, can be null if no image is provided
+class ReplyBase(BaseModel):
+    reply_id: str = Field(alias="_id")  # No default_factory, expects existing ID
+    parentContent_id: str
+    user_id: Optional[str] = None
+    text: str
+    repliedAt: datetime
+    replies: List['ReplyBase'] = []
+
+# Request schemas with auto-generated IDs (for creating new records)
+class BlogPost(BaseModel): 
+    blogPost_id: str = Field(default_factory=lambda: str(uuid4()), alias="_id")
+    comment_constraint: bool
+    tags: List[int]
+    number_of_views: int
+    title: str
+    content: str
+    postedAt: datetime = Field(default_factory=datetime.utcnow)
+    post_image: Optional[str] = None
+    user_id: Optional[str] = None
 
 class Comment(BaseModel):
-    comment_id: str = Field(default_factory=lambda: str(uuid4()), alias="_id")#UUID = Field(default_factory=uuid4, alias="_id") #primary key
-    user_id: Optional[str] = None #UUID to str ,commenting person`s user_id - Optional for request, set server-side
-    blogPost_id:str #UUID to str 
-    text:str #comment content
-    commentedAt:datetime = Field(default_factory=datetime.utcnow) #commented date time -utc time
-    replies: List['Reply'] = [] #for fetch_comments_and_replies() function
+    comment_id: str = Field(default_factory=lambda: str(uuid4()), alias="_id")
+    user_id: Optional[str] = None
+    blogPost_id: str
+    text: str
+    commentedAt: datetime = Field(default_factory=datetime.utcnow)
+    replies: List['Reply'] = []
 
 class Reply(BaseModel):
-    reply_id: str = Field(default_factory=lambda: str(uuid4()), alias="_id")#UUID = Field(default_factory=uuid4, alias="_id") #primary key
-    parentContent_id:str #UUID to str ,either a comment_id or reply_id (when someone reply to an existing reply)
-    user_id: Optional[str] = None #UUID to str, replying person`s` user_id - Optional for request, set server-side
-    text:str #reply content
-    repliedAt:datetime = Field(default_factory=datetime.utcnow) #replied date time -utc time
-    replies: List['Reply'] = []  #for fetch_comments_and_replies() function
+    reply_id: str = Field(default_factory=lambda: str(uuid4()), alias="_id")
+    parentContent_id: str
+    user_id: Optional[str] = None
+    text: str
+    repliedAt: datetime = Field(default_factory=datetime.utcnow)
+    replies: List['Reply'] = []
+
+# Response schemas extending base schemas
+class BlogPostWithUserData(BlogPostBase):
+    user_display_name: Optional[str]
+    user_image: Optional[str] = None
+
+class AllBlogsBlogPost(BaseModel): 
+    blogPost_id: str = Field(alias="_id")  # No default_factory, expects existing ID
+    comment_constraint: bool
+    tags: List[int]
+    number_of_views: int
+    title: str
+    content_preview: str
+    postedAt: datetime
+    post_image: Optional[str] = None
+    user_id: Optional[str] = None
+    user_display_name: Optional[str]
+    user_image: Optional[str] = None

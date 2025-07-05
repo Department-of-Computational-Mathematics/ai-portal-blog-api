@@ -1,6 +1,6 @@
 from typing import List, Union
 from fastapi import APIRouter, Query, Depends
-from app.schemas.blog import BlogPost, Comment, Reply, AllBlogsBlogPost, BlogPostWithUserData
+from app.schemas.blog import BlogPost, Comment, Reply, AllBlogsBlogPost, BlogPostWithUserData, CommentBase, ReplyBase
 from app.services.blog import create_blog, delete_blog_by_id, delete_comment_reply, fetch_comments_and_replies, get_all_blogs, get_blog_by_id, get_blogs_byTags, reply_comment, update_Comment_Reply, update_blog, write_comment
 from app.core.security import get_current_user_id
 
@@ -53,11 +53,11 @@ async def deleteBlog(id: str, current_user_id: str = Depends(get_current_user_id
 async def Blogs_By_tags(tags : List[int]= Query(..., description="List of tags")): #Query(..., description="List of tags") added to make get request correctly as it includes tag numbers 
     return await get_blogs_byTags(tags)
 
-@router.get('/blog/{id}/comments', response_model=List[Comment], tags=["Blog-Comment", "Unauthenticated"], summary="Get all comments and replies for a blog post")
+@router.get('/blog/{id}/comments', response_model=List[CommentBase], tags=["Blog-Comment", "Unauthenticated"], summary="Get all comments and replies for a blog post")
 async def get_comments_and_replies(id:str):
     return await fetch_comments_and_replies(id)
 
-@router.put('/edit-comment-reply/{id}', response_model=Union[Comment, Reply], tags=["Blog-Comment", "Authenticated"], summary="Update a comment or reply")
+@router.put('/edit-comment-reply/{id}', response_model=Union[CommentBase, ReplyBase], tags=["Blog-Comment", "Authenticated"], summary="Update a comment or reply")
 async def updateCommentReply(id: str, text: str, current_user_id: str = Depends(get_current_user_id)):
     return await update_Comment_Reply(id, text, current_user_id)
 

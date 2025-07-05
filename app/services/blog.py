@@ -2,7 +2,7 @@ import json
 from fastapi import HTTPException
 from bson import json_util
 from app.db.database import collection_blog, collection_comment, collection_reply
-from app.schemas.blog import BlogPost, Comment, Reply, BlogPostWithUserData, AllBlogsBlogPost
+from app.schemas.blog import BlogPost, Comment, Reply, BlogPostWithUserData, AllBlogsBlogPost, CommentBase, ReplyBase
 from typing import List
 
 CONTENT_PREVIEW_LENGTH = 150  # Length of content preview for AllBlogsBlogPost
@@ -111,7 +111,7 @@ async def get_all_blogs() -> List[AllBlogsBlogPost]:
     async for blog in cursor:
         # Convert BlogPost to AllBlogsBlogPost
         blog_data = {
-            "blogPost_id": str(blog["_id"]),
+            "_id": str(blog["_id"]),  # Use _id as the key since AllBlogsBlogPost uses alias="_id"
             "comment_constraint": blog["comment_constraint"],
             "tags": blog["tags"],
             "number_of_views": blog["number_of_views"],
@@ -167,7 +167,7 @@ async def get_blogs_byTags(tags : List[int]) -> List[AllBlogsBlogPost]:
     async for document in cursor: # added async
         # Convert BlogPost to AllBlogsBlogPost
         blog_data = {
-            "blogPost_id": str(document["_id"]),
+            "_id": str(document["_id"]),  # Use _id as the key since AllBlogsBlogPost uses alias="_id"
             "comment_constraint": document["comment_constraint"],
             "tags": document["tags"],
             "number_of_views": document["number_of_views"],
@@ -189,7 +189,7 @@ async def fetch_replies(parent_content_id: str): #uuid to str ,models.py -> blog
     async for reply in replies_cursor:
         reply_data = convert_mongo_doc_to_dict(reply)
         if reply_data:
-            reply_obj = Reply(**reply_data)
+            reply_obj = ReplyBase(**reply_data)
             # Recursively fetch replies for each reply
             reply_obj.replies = await fetch_replies(reply_obj.reply_id)
             replies.append(reply_obj)
@@ -208,7 +208,7 @@ async def fetch_comments_and_replies(id: str):
     async for comment in comments_cursor:
         comment_data = convert_mongo_doc_to_dict(comment)
         if comment_data:
-            comment_obj = Comment(**comment_data)
+            comment_obj = CommentBase(**comment_data)
             # Fetch replies for each comment
             comment_obj.replies = await fetch_replies(comment_obj.comment_id)
             comments.append(comment_obj)
@@ -233,7 +233,7 @@ async def update_Comment_Reply(id: str, text: str, user_id: str):
         if result.modified_count == 1:
             updated_comment = await collection_comment.find_one({"_id": id})
             comment_data = convert_mongo_doc_to_dict(updated_comment)
-            return Comment(**comment_data) if comment_data else None
+            return CommentBase(**comment_data) if comment_data else None
         raise HTTPException(400, "Comment update failed")
     
     # If it is not in comment collection, then search in reply collection
@@ -250,7 +250,7 @@ async def update_Comment_Reply(id: str, text: str, user_id: str):
         if result.modified_count == 1:
             updated_reply = await collection_reply.find_one({"_id": id})
             reply_data = convert_mongo_doc_to_dict(updated_reply)
-            return Reply(**reply_data) if reply_data else None
+            return ReplyBase(**reply_data) if reply_data else None
         raise HTTPException(400, "Reply update failed")
     
     raise HTTPException(404, "Comment or Reply not found")

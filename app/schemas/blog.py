@@ -17,7 +17,7 @@ class BlogPostBase(BaseModel):
     user_id: Optional[str] = None
 
 class CommentBase(BaseModel):
-    comment_id: str = Field(alias="_id")  # No default_factory, expects existing ID
+    comment_id: str = Field(alias="_id", serialization_alias="comment_id")  # No default_factory, expects existing ID
     user_id: Optional[str] = None
     blogPost_id: str
     text: str

@@ -97,16 +97,37 @@ async def update_blog(blog) -> BlogPostWithUserData:
 
 async def write_comment(comment):
     comment_dict = comment.dict(by_alias=True) # added this part because dictionary data type should be used for insert_one as parameter
+    
+    # Check if the blog post exists before allowing comment
+    blog_exists = await collection_blog.find_one({"_id": comment_dict["blogPost_id"]})
+    if not blog_exists:
+        raise HTTPException(status_code=404, detail=f"Blog post with id {comment_dict['blogPost_id']} not found")
+    
     result = await collection_comment.insert_one(comment_dict)
     if result.inserted_id:
-        return comment
+        # Return the comment from database as CommentBase to match response model
+        created_comment = await collection_comment.find_one({"_id": comment_dict["_id"]})
+        comment_data = convert_mongo_doc_to_dict(created_comment)
+        return CommentBase(**comment_data) if comment_data else None
     raise HTTPException(400, "Comment Insertion failed")
 
 async def reply_comment(reply):
     reply_dict = reply.dict(by_alias=True) # added this part because dictionary data type should be used for insert_one as parameter
+    
+    # Check if the parent comment or reply exists before allowing reply
+    parent_exists = await collection_comment.find_one({"_id": reply_dict["parentContent_id"]})
+    if not parent_exists:
+        # If not found in comments, check in replies (for nested replies)
+        parent_exists = await collection_reply.find_one({"_id": reply_dict["parentContent_id"]})
+        if not parent_exists:
+            raise HTTPException(status_code=404, detail=f"Parent content with id {reply_dict['parentContent_id']} not found")
+    
     result = await collection_reply.insert_one(reply_dict)
     if result.inserted_id:
-        return reply
+        # Return the reply from database to match response model expectations
+        created_reply = await collection_reply.find_one({"_id": reply_dict["_id"]})
+        reply_data = convert_mongo_doc_to_dict(created_reply)
+        return Reply(**reply_data) if reply_data else None
     raise HTTPException(400, "Reply Insertion failed")
 
 
@@ -221,7 +242,7 @@ async def fetch_comments_and_replies(id: str):
             comments.append(comment_obj)
     
     if len(comments)==0 :
-        raise HTTPException(404, "Comments not found")
+        raise HTTPException(404, "No comments found")
         
     return comments
 

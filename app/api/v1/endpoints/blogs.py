@@ -14,6 +14,14 @@ async def blog_service_health():
         "status": "healthy",
     }
 
+@router.get('/blogs', response_model=List[AllBlogsBlogPost], tags=["Blog", "Unauthenticated"], summary="Get all blogs")
+async def getAllBlogs():
+    return await get_all_blogs()
+
+@router.get('/blogsByTags',response_model=List[AllBlogsBlogPost], tags=["Blog", "Unauthenticated"], summary="Get blogs by tags")
+async def Blogs_By_tags(tags : List[int]=Query(..., description="List of tags")): #Query(..., description="List of tags") added to make get request correctly as it includes tag numbers 
+    return await get_blogs_byTags(tags)
+
 @router.get("/blog/{blog_id}", response_model=BlogPostWithUserData ,tags=["Blog", "Unauthenticated"], summary="Get Blog by ID")
 async def get_blog_by_blog_id(blog_id: str): #data type change from int to str
     blog = await get_blog_by_id(blog_id) #{"p_id": blog_id} => blog_id -function parameter error,parameter was not in format used in get_blog_by_id()
@@ -31,7 +39,16 @@ async def updateBlog(id: str, blog: BlogPost, current_user_id: str = Depends(get
     blog.blogPost_id = id  # Set the blog ID from the path parameter
     return await update_blog(blog)
 
-@router.post('/write-comment', response_model=Comment, tags=["Blog-Comment", "Authenticated"], summary="Write a comment on a blog post")
+
+@router.delete('/blogs/{id}', response_model=BlogPostWithUserData, tags=["Blog", "Authenticated"], summary="Delete a blog post by ID")
+async def deleteBlog(id: str, current_user_id: str = Depends(get_current_user_id)):
+    return await delete_blog_by_id(id, current_user_id)
+
+@router.get('/blog/{id}/comments', response_model=List[CommentBase], tags=["Blog-Comment", "Unauthenticated"], summary="Get all comments and replies for a blog post")
+async def get_comments_and_replies(id:str):
+    return await fetch_comments_and_replies(id)
+
+@router.post('/write-comment', response_model=CommentBase, tags=["Blog-Comment", "Authenticated"], summary="Write a comment on a blog post")
 async def writeComment(comment: Comment, current_user_id: str = Depends(get_current_user_id)):
     # Server side setting - more secure
     comment.user_id = current_user_id
@@ -42,22 +59,6 @@ async def replyComment(reply: Reply, current_user_id: str = Depends(get_current_
     # Server side setting - more secure
     reply.user_id = current_user_id
     return await reply_comment(reply)
-
-@router.get('/blogs', response_model=List[AllBlogsBlogPost], tags=["Blog", "Unauthenticated"], summary="Get all blogs")
-async def getAllBlogs():
-    return await get_all_blogs()
-
-@router.delete('/blogs/{id}', response_model=BlogPostWithUserData, tags=["Blog", "Authenticated"], summary="Delete a blog post by ID")
-async def deleteBlog(id: str, current_user_id: str = Depends(get_current_user_id)):
-    return await delete_blog_by_id(id, current_user_id)
-
-@router.get('/blogsByTags',response_model=List[AllBlogsBlogPost], tags=["Blog", "Unauthenticated"], summary="Get blogs by tags")
-async def Blogs_By_tags(tags : List[int]= Query(..., description="List of tags")): #Query(..., description="List of tags") added to make get request correctly as it includes tag numbers 
-    return await get_blogs_byTags(tags)
-
-@router.get('/blog/{id}/comments', response_model=List[CommentBase], tags=["Blog-Comment", "Unauthenticated"], summary="Get all comments and replies for a blog post")
-async def get_comments_and_replies(id:str):
-    return await fetch_comments_and_replies(id)
 
 @router.put('/edit-comment-reply/{id}', response_model=Union[CommentBase, ReplyBase], tags=["Blog-Comment", "Authenticated"], summary="Update a comment or reply")
 async def updateCommentReply(id: str, text: str, current_user_id: str = Depends(get_current_user_id)):

@@ -9,6 +9,7 @@ class BlogPostBase(BaseModel):
     comment_constraint: bool
     tags: List[str]
     number_of_views: int
+    likes_count: int = 0
     title: str
     content: str
     postedAt: datetime
@@ -37,6 +38,7 @@ class BlogPost(BaseModel):
     comment_constraint: bool
     tags: List[str]
     number_of_views: int
+    likes_count: int = 0
     title: str
     content: str
     postedAt: datetime = Field(default_factory=datetime.utcnow)
@@ -63,6 +65,16 @@ class Reply(BaseModel):
 class UpdateTextRequest(BaseModel):
     text: str
 
+# Like model for blog likes
+class Like(BaseModel):
+    like_id: str = Field(default_factory=lambda: str(uuid4()), alias="_id")
+    blog_id: str
+    user_id: str
+    liked_at: datetime = Field(default_factory=datetime.utcnow)
+
+class LikeRequest(BaseModel):
+    like_value: int = Field(..., ge=0, le=1, description="0 to unlike, 1 to like")
+
 # Response schemas extending base schemas
 class BlogPostWithUserData(BlogPostBase):
     user_display_name: Optional[str]
@@ -73,6 +85,7 @@ class AllBlogsBlogPost(BaseModel):
     comment_constraint: bool
     tags: List[str]
     number_of_views: int
+    likes_count: int = 0
     title: str
     content_preview: str
     postedAt: datetime
@@ -80,5 +93,18 @@ class AllBlogsBlogPost(BaseModel):
     user_id: Optional[str] = None
     user_display_name: Optional[str]
     user_image: Optional[str] = None
+
+# Response models for like endpoints
+class LikeResponse(BaseModel):
+    message: str
+    liked: bool
+
+class LikeStatusResponse(BaseModel):
+    blog_id: str
+    user_id: str
+    is_liked: bool
+    likes_count: int
+    like_id: Optional[str] = None
+    liked_at: Optional[datetime] = None
 
 # NOTE: alias is input for serialization, serialization_alias is output for serialization.

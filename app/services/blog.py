@@ -1,8 +1,8 @@
 import json
 from fastapi import HTTPException
 from bson import json_util
-from app.db.database import collection_blog, collection_comment, collection_reply
-from app.schemas.blog import BlogPost, Comment, Reply, BlogPostWithUserData, AllBlogsBlogPost, CommentBase, ReplyBase
+from app.db.database import collection_blog, collection_comment, collection_reply, collection_like
+from app.schemas.blog import BlogPost, Comment, Reply, BlogPostWithUserData, AllBlogsBlogPost, CommentBase, ReplyBase, Like
 from typing import List
 
 CONTENT_PREVIEW_LENGTH = 150  # Length of content preview for AllBlogsBlogPost
@@ -148,6 +148,7 @@ async def get_all_blogs() -> List[AllBlogsBlogPost]:
             "comment_constraint": blog["comment_constraint"],
             "tags": blog["tags"],
             "number_of_views": blog["number_of_views"],
+            "likes_count": blog.get("likes_count", 0),  # Default to 0 for backward compatibility
             "title": blog["title"],
             "content_preview": blog["content"][:CONTENT_PREVIEW_LENGTH] + "..." if len(blog["content"]) > CONTENT_PREVIEW_LENGTH else blog["content"],  # Create preview from content
             "postedAt": blog["postedAt"],
@@ -204,6 +205,7 @@ async def get_blogs_byTags(tags : List[str]) -> List[AllBlogsBlogPost]:
             "comment_constraint": document["comment_constraint"],
             "tags": document["tags"],
             "number_of_views": document["number_of_views"],
+            "likes_count": document.get("likes_count", 0),  # Default to 0 for backward compatibility
             "title": document["title"],
             "content_preview": document["content"][:CONTENT_PREVIEW_LENGTH] + "..." if len(document["content"]) > 200 else document["content"],  # Create preview from content
             "postedAt": document["postedAt"],
@@ -320,3 +322,91 @@ async def delete_comment_reply(id: str, user_id: str):
         return {"message": "Reply and nested replies deleted successfully"}
     
     raise HTTPException(404, "Comment or Reply not found")
+
+async def toggle_like(blog_id: str, user_id: str, like_value: int):
+    """
+    Toggle like/unlike for a blog post.
+    like_value: 0 to unlike, 1 to like
+    """
+    # First check if blog exists
+    blog = await collection_blog.find_one({"_id": blog_id})
+    if not blog:
+        raise HTTPException(404, "Blog not found")
+    
+    # Check if user has already liked this blog
+    existing_like = await collection_like.find_one({"blog_id": blog_id, "user_id": user_id})
+    
+    if like_value == 1:  # User wants to like the blog
+        if existing_like:
+            # Already liked - no action needed
+            return {"message": "Blog already liked", "liked": True}
+        else:
+            # Create new like record
+            like = Like(blog_id=blog_id, user_id=user_id)
+            like_dict = like.dict(by_alias=True)
+            result = await collection_like.insert_one(like_dict)
+            if result.inserted_id:
+                # Increment likes_count in blog post, handling case where field might not exist
+                await collection_blog.update_one(
+                    {"_id": blog_id},
+                    [
+                        {
+                            "$set": {
+                                "likes_count": {"$add": [{"$ifNull": ["$likes_count", 0]}, 1]}
+                            }
+                        }
+                    ]
+                )
+                return {"message": "Blog liked successfully", "liked": True}
+            else:
+                raise HTTPException(400, "Failed to like blog")
+    
+    elif like_value == 0:  # User wants to unlike the blog
+        if existing_like:
+            # Remove the like record
+            result = await collection_like.delete_one({"blog_id": blog_id, "user_id": user_id})
+            if result.deleted_count > 0:
+                # Decrement likes_count in blog post, but ensure it doesn't go below 0
+                await collection_blog.update_one(
+                    {"_id": blog_id},
+                    [
+                        {
+                            "$set": {
+                                "likes_count": {
+                                    "$max": [{"$subtract": [{"$ifNull": ["$likes_count", 0]}, 1]}, 0]
+                                }
+                            }
+                        }
+                    ]
+                )
+                return {"message": "Blog unliked successfully", "liked": False}
+            else:
+                raise HTTPException(400, "Failed to unlike blog")
+        else:
+            # Already not liked - no action needed
+            return {"message": "Blog not liked yet", "liked": False}
+    
+    else:
+        raise HTTPException(400, "Invalid like value. Use 0 to unlike or 1 to like")
+
+async def check_user_like_status(blog_id: str, user_id: str):
+    """
+    Check if a user has liked a specific blog post.
+    Returns the like status and blog information.
+    """
+    # First check if blog exists
+    blog = await collection_blog.find_one({"_id": blog_id})
+    if not blog:
+        raise HTTPException(404, "Blog not found")
+    
+    # Check if user has liked this blog
+    existing_like = await collection_like.find_one({"blog_id": blog_id, "user_id": user_id})
+    
+    return {
+        "blog_id": blog_id,
+        "user_id": user_id,
+        "is_liked": existing_like is not None,
+        "likes_count": blog.get("likes_count", 0),
+        "like_id": str(existing_like["_id"]) if existing_like else None,
+        "liked_at": existing_like.get("liked_at") if existing_like else None
+    }

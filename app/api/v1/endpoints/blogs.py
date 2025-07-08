@@ -1,7 +1,7 @@
 from typing import List, Union
 from fastapi import APIRouter, Query, Depends
-from app.schemas.blog import BlogPost, Comment, Reply, AllBlogsBlogPost, BlogPostWithUserData, CommentBase, ReplyBase, UpdateTextRequest
-from app.services.blog import create_blog, delete_blog_by_id, delete_comment_reply, fetch_comments_and_replies, get_all_blogs, get_blog_by_id, get_blogs_byTags, reply_comment, update_Comment_Reply, update_blog, write_comment
+from app.schemas.blog import BlogPost, Comment, Reply, AllBlogsBlogPost, BlogPostWithUserData, CommentBase, ReplyBase, UpdateTextRequest, LikeRequest, LikeResponse, LikeStatusResponse
+from app.services.blog import create_blog, delete_blog_by_id, delete_comment_reply, fetch_comments_and_replies, get_all_blogs, get_blog_by_id, get_blogs_byTags, reply_comment, update_Comment_Reply, update_blog, write_comment, toggle_like, check_user_like_status
 from app.core.security import get_current_user_id
 
 router = APIRouter()
@@ -13,6 +13,8 @@ async def blog_service_health():
         "service": "blog-service",
         "status": "healthy",
     }
+
+# NOTE: All endpoints with `Authenticated` tag require `X-User-ID` header to be set with the user's ID.
 
 @router.get('/blogs', response_model=List[AllBlogsBlogPost], tags=["Blog", "Unauthenticated"], summary="Get all blogs")
 async def getAllBlogs():
@@ -68,3 +70,20 @@ async def updateCommentReply(id: str, request: UpdateTextRequest, current_user_i
 @router.delete('/delete-comment-reply/{id}', tags=["Blog-Comment", "Authenticated"], summary="Delete a comment or reply")
 async def deleteCommentReply(id: str, current_user_id: str = Depends(get_current_user_id)):
     return await delete_comment_reply(id, current_user_id)
+
+@router.post('/blog/{blog_id}/like', response_model=LikeResponse, tags=["Blog", "Authenticated"], summary="Like or unlike a blog post")
+async def like_unlike_blog(blog_id: str, like_request: LikeRequest, current_user_id: str = Depends(get_current_user_id)):
+    """
+    Like or unlike a blog post.
+    - like_value: 0 to unlike, 1 to like
+    """
+    return await toggle_like(blog_id, current_user_id, like_request.like_value)
+
+@router.get('/blog/{blog_id}/like-status', response_model=LikeStatusResponse, tags=["Blog", "Authenticated"], summary="Check if user has liked a blog post")
+async def get_user_like_status(blog_id: str, current_user_id: str = Depends(get_current_user_id)):
+    """
+    Check if the current user has liked a specific blog post.
+    Returns like status, total likes count, and like details if applicable.
+    """
+    return await check_user_like_status(blog_id, current_user_id)
+

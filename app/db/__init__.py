@@ -7,6 +7,7 @@ from app.db.database import (
     collection_user,
     collection_comment,
     collection_reply,
+    collection_like,
 )
 
 __all__ = [
@@ -15,4 +16,5 @@ __all__ = [
     "collection_user",
     "collection_comment",
     "collection_reply",
+    "collection_like",
 ] 

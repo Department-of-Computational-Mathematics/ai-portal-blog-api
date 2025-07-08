@@ -14,6 +14,7 @@ collection_user = database["User"]
 collection_blog = database["Blogs"]
 collection_comment = database["Comments"]
 collection_reply = database["Replies"]
+collection_like = database["Likes"]
 
 # Database dependency
 async def get_database() -> AsyncGenerator[motor.motor_asyncio.AsyncIOMotorDatabase, None]:

@@ -19,6 +19,8 @@ class BlogPostBase(BaseModel):
 class CommentBase(BaseModel):
     comment_id: str = Field(alias="_id", serialization_alias="comment_id")  # No default_factory, expects existing ID
     user_id: Optional[str] = None
+    user_display_name: Optional[str] = None
+    user_profile_image: Optional[str] = None
     blogPost_id: str
     text: str
     commentedAt: datetime
@@ -28,6 +30,8 @@ class ReplyBase(BaseModel):
     reply_id: str = Field(alias="_id", serialization_alias="reply_id")  # No default_factory, expects existing ID
     parentContent_id: str
     user_id: Optional[str] = None
+    user_display_name: Optional[str] = None
+    user_profile_image: Optional[str] = None
     text: str
     repliedAt: datetime
     replies: List['ReplyBase'] = []

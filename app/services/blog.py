@@ -113,6 +113,10 @@ async def write_comment(comment):
         # Return the comment from database as CommentBase to match response model
         created_comment = await collection_comment.find_one({"_id": comment_dict["_id"]})
         comment_data = convert_mongo_doc_to_dict(created_comment)
+        if comment_data:
+            # Add dummy user data (to be populated later with actual user service logic)
+            comment_data["user_display_name"] = "dummy_user"
+            comment_data["user_profile_image"] = "https://picsum.photos/50"
         return CommentBase(**comment_data) if comment_data else None
     raise HTTPException(400, "Comment Insertion failed")
 
@@ -132,6 +136,10 @@ async def reply_comment(reply):
         # Return the reply from database to match response model expectations
         created_reply = await collection_reply.find_one({"_id": reply_dict["_id"]})
         reply_data = convert_mongo_doc_to_dict(created_reply)
+        if reply_data:
+            # Add dummy user data (to be populated later with actual user service logic)
+            reply_data["user_display_name"] = "dummy_user"
+            reply_data["user_profile_image"] = "https://picsum.photos/50"
         return ReplyBase(**reply_data) if reply_data else None
     raise HTTPException(400, "Reply Insertion failed")
 
@@ -224,6 +232,9 @@ async def fetch_replies(parent_content_id: str): #uuid to str ,models.py -> blog
     async for reply in replies_cursor:
         reply_data = convert_mongo_doc_to_dict(reply)
         if reply_data:
+            # Add dummy user data (to be populated later with actual user service logic)
+            reply_data["user_display_name"] = "dummy_user"
+            reply_data["user_profile_image"] = "https://picsum.photos/50"
             reply_obj = ReplyBase(**reply_data)
             # Recursively fetch replies for each reply TODO: Any way to limit recursion depth or avoid recursion all together?
             reply_obj.replies = await fetch_replies(reply_obj.reply_id)
@@ -243,6 +254,9 @@ async def fetch_comments_and_replies(id: str):
     async for comment in comments_cursor:
         comment_data = convert_mongo_doc_to_dict(comment)
         if comment_data:
+            # Add dummy user data (to be populated later with actual user service logic)
+            comment_data["user_display_name"] = "dummy_user"
+            comment_data["user_profile_image"] = "https://picsum.photos/50"
             comment_obj = CommentBase(**comment_data)
             # Fetch replies for each comment
             comment_obj.replies = await fetch_replies(comment_obj.comment_id)
@@ -268,6 +282,10 @@ async def update_Comment_Reply(id: str, text: str, user_id: str):
         if result.modified_count == 1:
             updated_comment = await collection_comment.find_one({"_id": id})
             comment_data = convert_mongo_doc_to_dict(updated_comment)
+            if comment_data:
+                # Add dummy user data (to be populated later with actual user service logic)
+                comment_data["user_display_name"] = "dummy_user"
+                comment_data["user_profile_image"] = "https://picsum.photos/50"
             return CommentBase(**comment_data) if comment_data else None
         raise HTTPException(400, "Comment update failed")
     
@@ -285,6 +303,10 @@ async def update_Comment_Reply(id: str, text: str, user_id: str):
         if result.modified_count == 1:
             updated_reply = await collection_reply.find_one({"_id": id})
             reply_data = convert_mongo_doc_to_dict(updated_reply)
+            if reply_data:
+                # Add dummy user data (to be populated later with actual user service logic)
+                reply_data["user_display_name"] = "dummy_user"
+                reply_data["user_profile_image"] = "https://picsum.photos/50"
             return ReplyBase(**reply_data) if reply_data else None
         raise HTTPException(400, "Reply update failed")
     

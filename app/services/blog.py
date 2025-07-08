@@ -30,13 +30,18 @@ def convert_mongo_doc_to_dict(doc):
 async def get_blog_by_id(entity_id: str) -> BlogPostWithUserData: #data type changed from int to str
     try:
         entity = await collection_blog.find_one({"_id": entity_id}) #blogPost_id to _id , becaue in models.py ,"blogPost_id" changed to "_id" by  " alias="_id" "
-        if entity is None:
-            raise HTTPException(status_code=404, detail=f"Blog with id {entity_id} not found")
-        
+
         # Convert MongoDB document to BlogPostWithUserData
         blog_data = convert_mongo_doc_to_dict(entity)
         if blog_data is None:
             raise HTTPException(status_code=404, detail=f"Blog with id {entity_id} not found")
+        
+        # INFO: Design decision: current view is not considered for the view count. Idea is user want to know how many previous views
+        # Increment the number_of_views by 1
+        await collection_blog.update_one(
+            {"_id": entity_id},
+            {"$inc": {"number_of_views": 1}}
+        )
         
         # Add dummy user data (to be populated later with actual user service logic)
         blog_data["user_display_name"] = "dummy_user"

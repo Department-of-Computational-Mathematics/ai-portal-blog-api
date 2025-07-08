@@ -187,7 +187,7 @@ async def delete_blog_by_id(id: str, user_id: str) -> BlogPostWithUserData:
     
     return deleted_blog
 
-async def get_blogs_byTags(tags : List[int]) -> List[AllBlogsBlogPost]:
+async def get_blogs_byTags(tags : List[str]) -> List[AllBlogsBlogPost]:
     blogs=[]
     if await collection_blog.count_documents({"tags": {"$in": tags}}) == 0: # await added because httpException didnt work due to have no enough time to count.
         raise HTTPException(status_code=404, detail="no blogs found with the given tags.")

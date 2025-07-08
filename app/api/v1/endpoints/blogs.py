@@ -19,7 +19,7 @@ async def getAllBlogs():
     return await get_all_blogs()
 
 @router.get('/blogsByTags',response_model=List[AllBlogsBlogPost], tags=["Blog", "Unauthenticated"], summary="Get blogs by tags")
-async def Blogs_By_tags(tags : List[int]=Query(..., description="List of tags")): #Query(..., description="List of tags") added to make get request correctly as it includes tag numbers 
+async def Blogs_By_tags(tags : List[str]=Query(..., description="List of tags")): #Query(..., description="List of tags") added to make get request correctly as it includes tag numbers 
     return await get_blogs_byTags(tags)
 
 @router.get("/blog/{blog_id}", response_model=BlogPostWithUserData ,tags=["Blog", "Unauthenticated"], summary="Get Blog by ID")

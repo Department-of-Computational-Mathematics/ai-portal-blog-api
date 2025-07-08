@@ -7,7 +7,7 @@ from datetime import datetime
 class BlogPostBase(BaseModel): 
     blogPost_id: str = Field(alias="_id", serialization_alias="blog_id")  # No default_factory, expects existing ID
     comment_constraint: bool
-    tags: List[int]
+    tags: List[str]
     number_of_views: int
     title: str
     content: str
@@ -35,7 +35,7 @@ class ReplyBase(BaseModel):
 class BlogPost(BaseModel): 
     blogPost_id: str = Field(default_factory=lambda: str(uuid4()), alias="_id")
     comment_constraint: bool
-    tags: List[int]
+    tags: List[str]
     number_of_views: int
     title: str
     content: str
@@ -71,7 +71,7 @@ class BlogPostWithUserData(BlogPostBase):
 class AllBlogsBlogPost(BaseModel): 
     blogPost_id: str = Field(alias="_id", serialization_alias="blog_id")  # No default_factory, expects existing ID
     comment_constraint: bool
-    tags: List[int]
+    tags: List[str]
     number_of_views: int
     title: str
     content_preview: str

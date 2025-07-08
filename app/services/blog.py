@@ -149,7 +149,7 @@ async def get_all_blogs() -> List[AllBlogsBlogPost]:
             "tags": blog["tags"],
             "number_of_views": blog["number_of_views"],
             "title": blog["title"],
-            "content_preview": blog["content"][:CONTENT_PREVIEW_LENGTH] + "..." if len(blog["content"]) > 200 else blog["content"],  # Create preview from content
+            "content_preview": blog["content"][:CONTENT_PREVIEW_LENGTH] + "..." if len(blog["content"]) > CONTENT_PREVIEW_LENGTH else blog["content"],  # Create preview from content
             "postedAt": blog["postedAt"],
             "post_image": blog.get("post_image"),
             "user_id": blog.get("user_id"),

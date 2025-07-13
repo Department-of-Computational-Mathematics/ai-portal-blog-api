@@ -1,6 +1,8 @@
-# FastAPI Blog Application
+# AI Portal Blog API
 
-A modern blog API built with FastAPI, MongoDB, and Pydantic.
+Blog api developed for the AI webstie "Chapter".
+
+Features a modern blog API built with FastAPI, MongoDB, and Pydantic.
 
 ## Project Structure
 

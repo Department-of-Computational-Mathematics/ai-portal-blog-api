@@ -1,21 +1,19 @@
 import requests
 from typing import List, Dict, Optional
+from pprint import pprint
 
-KEYCLOAK_URL = "http://keycloak:8080"
-REALM = "uni"
-CLIENT_ID = "backend"  # Change if using a custom client
-CLIENT_SECRET = "moYTzhKnzjkOHYIBrjftYkVbOXZQBuir"  # TODO: Set this securely
+from app.core.config import settings
 
 
 def get_keycloak_token() -> Optional[str]:
     resp = requests.post(
-        f"{KEYCLOAK_URL}/realms/{REALM}/protocol/openid-connect/token",
+        f"{settings.KEYCLOAK_URL}/realms/{settings.REALM}/protocol/openid-connect/token",
         data={
-            "client_id": CLIENT_ID,
-            "client_secret": CLIENT_SECRET,
-            "grant_type": "client_credentials"
+            "client_id": settings.CLIENT_ID,
+            "client_secret": settings.CLIENT_SECRET,
+            "grant_type": "client_credentials",
         },
-        timeout=10
+        timeout=10,
     )
     if resp.status_code == 200:
         return resp.json().get("access_token")
@@ -27,9 +25,9 @@ def get_all_users() -> List[Dict]:
     if not token:
         return []
     resp = requests.get(
-        f"{KEYCLOAK_URL}/admin/realms/{REALM}/users",
+        f"{settings.KEYCLOAK_URL}/admin/realms/{settings.REALM}/users",
         headers={"Authorization": f"Bearer {token}"},
-        timeout=10
+        timeout=10,
     )
     if resp.status_code == 200:
         return resp.json()
@@ -41,14 +39,14 @@ def get_user_by_id(user_id: str) -> Optional[Dict]:
     if not token:
         return None
     resp = requests.get(
-        f"{KEYCLOAK_URL}/admin/realms/{REALM}/users/{user_id}",
+        f"{settings.KEYCLOAK_URL}/admin/realms/{settings.REALM}/users/{user_id}",
         headers={"Authorization": f"Bearer {token}"},
-        timeout=10
+        timeout=10,
     )
     if resp.status_code == 200:
         return resp.json()
-    return None 
+    return None
 
 
-# if __name__ == "__main__":
-#     print(get_all_users())
+if __name__ == "__main__":
+    pprint(get_all_users())

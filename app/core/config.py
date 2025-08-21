@@ -18,10 +18,11 @@ class Settings(BaseSettings):
     MONGODB_DB_NAME: str = "AIPortalBlog"
     
     # Keycloak settings
-    KEYCLOAK_URL = "http://localhost:8080"
-    REALM = "master"
-    CLIENT_ID = "blogs-service"  # Custom client used for blog service (separation of concerns)
-    CLIENT_SECRET = os.getenv("BLOGS_CLIENT_SECRET")
+    KEYCLOAK_URL: str = "http://localhost:8080"
+    REALM: str = "master"
+    CLIENT_ID: str = "blogs-service"  # Custom client used for blog service (separation of concerns)
+    CLIENT_SECRET: str = os.getenv("BLOGS_CLIENT_SECRET", "")
+
     class Config:
         case_sensitive = True
 

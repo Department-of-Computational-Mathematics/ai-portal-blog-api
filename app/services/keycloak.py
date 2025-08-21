@@ -1,3 +1,4 @@
+from fastapi import HTTPException
 import requests
 from typing import List, Dict, Optional
 from pprint import pprint
@@ -17,13 +18,20 @@ def get_keycloak_token() -> Optional[str]:
     )
     if resp.status_code == 200:
         return resp.json().get("access_token")
-    return None
+    if resp.status_code == 401:
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized access - invalid client or credentials for keycloak"
+        )
 
 
 def get_all_users() -> List[Dict]:
     token = get_keycloak_token()
     if not token:
-        return []
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized access - empty token received from Keycloak"
+        )
     resp = requests.get(
         f"{settings.KEYCLOAK_URL}/admin/realms/{settings.REALM}/users",
         headers={"Authorization": f"Bearer {token}"},
@@ -31,13 +39,19 @@ def get_all_users() -> List[Dict]:
     )
     if resp.status_code == 200:
         return resp.json()
-    return []
+    raise HTTPException(
+        status_code=500,
+        detail=f"Internal Server Error. Keycloak returned a {resp.status_code} - {resp.text} error"
+    )
 
 
 def get_user_by_id(user_id: str) -> Optional[Dict]:
     token = get_keycloak_token()
     if not token:
-        return None
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized access - empty token received from Keycloak"
+        )
     resp = requests.get(
         f"{settings.KEYCLOAK_URL}/admin/realms/{settings.REALM}/users/{user_id}",
         headers={"Authorization": f"Bearer {token}"},
@@ -45,7 +59,15 @@ def get_user_by_id(user_id: str) -> Optional[Dict]:
     )
     if resp.status_code == 200:
         return resp.json()
-    return None
+    if resp.status_code == 404:
+        raise HTTPException(
+            status_code=404,
+            detail=f"User not found with ID: {user_id}"
+        )
+    raise HTTPException(
+        status_code=500,
+        detail=f"Internal Server Error. Keycloak returned a {resp.status_code} - {resp.text} error"
+    )
 
 
 if __name__ == "__main__":

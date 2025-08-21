@@ -3,6 +3,7 @@ from fastapi import HTTPException
 from bson import json_util
 from app.db.database import collection_blog, collection_comment, collection_reply, collection_like
 from app.schemas.blog import BlogPost, Comment, Reply, BlogPostWithUserData, AllBlogsBlogPost, CommentBase, ReplyBase, Like
+from app.services.keycloak import get_user_by_id
 from typing import List
 
 CONTENT_PREVIEW_LENGTH = 150  # Length of content preview for AllBlogsBlogPost
@@ -35,7 +36,7 @@ async def get_blog_by_id(entity_id: str) -> BlogPostWithUserData: #data type cha
         blog_data = convert_mongo_doc_to_dict(entity)
         if blog_data is None:
             raise HTTPException(status_code=404, detail=f"Blog with id {entity_id} not found")
-        
+
         # INFO: Design decision: current view is not considered for the view count. Idea is user want to know how many previous views
         # Increment the number_of_views by 1
         await collection_blog.update_one(
@@ -43,10 +44,16 @@ async def get_blog_by_id(entity_id: str) -> BlogPostWithUserData: #data type cha
             {"$inc": {"number_of_views": 1}}
         )
         
-        # Add dummy user data (to be populated later with actual user service logic)
-        blog_data["user_display_name"] = "dummy_user"
-        blog_data["user_image"] = "https://picsum.photos/200"
+        # Inject data from keycloak
+        user_data = None
+        # Handle keycloak service errors as here the importance is serving the blog, not username or profile pic of author
+        try:
+            user_data = get_user_by_id(blog_data["user_id"])
+        finally:
+            blog_data["user_display_name"] = user_data.username if user_data else ""
+            blog_data["user_image"] = user_data.profile_pic_url if user_data else ""
         return BlogPostWithUserData(**blog_data)
+    
     except HTTPException:
         raise
     except Exception as e:
@@ -60,8 +67,15 @@ async def create_blog(blog) -> BlogPostWithUserData:
     if result.inserted_id:
         # Convert BlogPost to BlogPostWithUserData for response
         blog_data = blog.dict(by_alias=True)  # Use by_alias=True to get _id instead of blogPost_id
-        blog_data["user_display_name"] = "dummy_user"
-        blog_data["user_image"] = "https://picsum.photos/200"
+
+        # Inject data from keycloak
+        user_data = None
+        # Handle keycloak service errors as here the importance is serving the blog, not username or profile pic of author
+        try:
+            user_data = get_user_by_id(blog_data["user_id"])
+        finally:
+            blog_data["user_display_name"] = user_data.username if user_data else ""
+            blog_data["user_image"] = user_data.profile_pic_url if user_data else ""
         return BlogPostWithUserData(**blog_data)
     raise HTTPException(400, "Blog Insertion failed")
 
@@ -93,8 +107,15 @@ async def update_blog(blog) -> BlogPostWithUserData:
         blog_data = convert_mongo_doc_to_dict(updated_blog)
         if blog_data is None:
             raise HTTPException(400, "Blog update failed")
-        blog_data["user_display_name"] = "dummy_user"
-        blog_data["user_image"] = "https://picsum.photos/200"
+        
+        # Inject data from keycloak
+        user_data = None
+        # Handle keycloak service errors as here the importance is serving the blog, not username or profile pic of author
+        try:
+            user_data = get_user_by_id(blog_data["user_id"])
+        finally:
+            blog_data["user_display_name"] = user_data.username if user_data else ""
+            blog_data["user_image"] = user_data.profile_pic_url if user_data else ""
         return BlogPostWithUserData(**blog_data)
     
     raise HTTPException(400, "Blog update failed")
@@ -114,10 +135,16 @@ async def write_comment(comment):
         created_comment = await collection_comment.find_one({"_id": comment_dict["_id"]})
         comment_data = convert_mongo_doc_to_dict(created_comment)
         if comment_data:
-            # Add dummy user data (to be populated later with actual user service logic)
-            comment_data["user_display_name"] = "dummy_user"
-            comment_data["user_profile_image"] = "https://picsum.photos/50"
-        return CommentBase(**comment_data) if comment_data else None
+                    # Inject data from keycloak
+            user_data = None
+            # Handle keycloak service errors as here the importance is serving the blog, not username or profile pic of author
+            try:
+                user_data = get_user_by_id(comment_data["user_id"])
+            finally:
+                comment_data["user_display_name"] = user_data.username if user_data else ""
+                comment_data["user_profile_image"] = user_data.profile_pic_url if user_data else ""
+            return CommentBase(**comment_data)
+        return None
     raise HTTPException(400, "Comment Insertion failed")
 
 async def reply_comment(reply):
@@ -137,10 +164,16 @@ async def reply_comment(reply):
         created_reply = await collection_reply.find_one({"_id": reply_dict["_id"]})
         reply_data = convert_mongo_doc_to_dict(created_reply)
         if reply_data:
-            # Add dummy user data (to be populated later with actual user service logic)
-            reply_data["user_display_name"] = "dummy_user"
-            reply_data["user_profile_image"] = "https://picsum.photos/50"
-        return ReplyBase(**reply_data) if reply_data else None
+            # Inject data from keycloak
+            user_data = None
+            # Handle keycloak service errors as here the importance is serving the blog, not username or profile pic of author
+            try:
+                user_data = get_user_by_id(reply_data["user_id"])
+            finally:
+                reply_data["user_display_name"] = user_data.username if user_data else ""
+                reply_data["user_image"] = user_data.profile_pic_url if user_data else ""
+            return ReplyBase(**reply_data)
+        return None
     raise HTTPException(400, "Reply Insertion failed")
 
 
@@ -150,22 +183,28 @@ async def get_all_blogs() -> List[AllBlogsBlogPost]:
     blogs = []
     cursor = collection_blog.find({})
     async for blog in cursor:
-        # Convert BlogPost to AllBlogsBlogPost
-        blog_data = {
-            "_id": str(blog["_id"]),  # Use _id as the key since AllBlogsBlogPost uses alias="_id"
-            "comment_constraint": blog["comment_constraint"],
-            "tags": blog["tags"],
-            "number_of_views": blog["number_of_views"],
-            "likes_count": blog.get("likes_count", 0),  # Default to 0 for backward compatibility
-            "title": blog["title"],
-            "content_preview": blog["content"][:CONTENT_PREVIEW_LENGTH] + "..." if len(blog["content"]) > CONTENT_PREVIEW_LENGTH else blog["content"],  # Create preview from content
-            "postedAt": blog["postedAt"],
-            "post_image": blog.get("post_image"),
-            "user_id": blog.get("user_id"),
-            "user_display_name": "dummy_user",  # Dummy data
-            "user_image": "https://picsum.photos/200"  # Dummy data
-        }
-        blogs.append(AllBlogsBlogPost(**blog_data))
+        # Inject data from keycloak
+        user_data = None
+        # Handle keycloak service errors as here the importance is serving the blog, not username or profile pic of author
+        try:
+            user_data = get_user_by_id(blog["user_id"])
+        finally:
+            # Convert BlogPost to AllBlogsBlogPost
+            blog_data = {
+                "_id": str(blog["_id"]),  # Use _id as the key since AllBlogsBlogPost uses alias="_id"
+                "comment_constraint": blog["comment_constraint"],
+                "tags": blog["tags"],
+                "number_of_views": blog["number_of_views"],
+                "likes_count": blog.get("likes_count", 0),  # Default to 0 for backward compatibility
+                "title": blog["title"],
+                "content_preview": blog["content"][:CONTENT_PREVIEW_LENGTH] + "..." if len(blog["content"]) > CONTENT_PREVIEW_LENGTH else blog["content"],  # Create preview from content
+                "postedAt": blog["postedAt"],
+                "post_image": blog.get("post_image"),
+                "user_id": blog.get("user_id"),
+                "user_display_name": user_data.username if user_data else "",
+                "user_image": user_data.profile_pic_url if user_data else ""
+            }
+            blogs.append(AllBlogsBlogPost(**blog_data))
     if len(blogs) == 0:
         raise HTTPException(404, "No blogs found")
     return blogs
@@ -184,8 +223,16 @@ async def delete_blog_by_id(id: str, user_id: str) -> BlogPostWithUserData:
     blog_data = convert_mongo_doc_to_dict(blog)
     if blog_data is None:
         raise HTTPException(status_code=404, detail=f"Blog with id {id} not found")
-    blog_data["user_display_name"] = "dummy_user"
-    blog_data["user_image"] = "https://picsum.photos/200"
+    
+    # Inject data from keycloak
+    user_data = None
+    # Handle keycloak service errors as here the importance is serving the blog, not username or profile pic of author
+    try:
+        user_data = get_user_by_id(blog_data["user_id"])
+    finally:
+        blog_data["user_display_name"] = user_data.username if user_data else ""
+        blog_data["user_image"] = user_data.profile_pic_url if user_data else ""
+
     deleted_blog = BlogPostWithUserData(**blog_data)
     
     result = await collection_blog.delete_one({'_id': id})
@@ -208,21 +255,27 @@ async def get_blogs_byTags(tags : List[str]) -> List[AllBlogsBlogPost]:
     cursor=collection_blog.find({"tags": {"$in": tags}}) 
     async for document in cursor: # added async
         # Convert BlogPost to AllBlogsBlogPost
-        blog_data = {
-            "_id": str(document["_id"]),  # Use _id as the key since AllBlogsBlogPost uses alias="_id"
-            "comment_constraint": document["comment_constraint"],
-            "tags": document["tags"],
-            "number_of_views": document["number_of_views"],
-            "likes_count": document.get("likes_count", 0),  # Default to 0 for backward compatibility
-            "title": document["title"],
-            "content_preview": document["content"][:CONTENT_PREVIEW_LENGTH] + "..." if len(document["content"]) > 200 else document["content"],  # Create preview from content
-            "postedAt": document["postedAt"],
-            "post_image": document.get("post_image"),
-            "user_id": document.get("user_id"),
-            "user_display_name": "dummy_user",  # Dummy data
-            "user_image": "https://picsum.photos/200"  # Dummy data
-        }
-        blogs.append(AllBlogsBlogPost(**blog_data))
+        # Inject data from keycloak
+        user_data = None
+        # Handle keycloak service errors as here the importance is serving the blog, not username or profile pic of author
+        try:
+            user_data = get_user_by_id(document["user_id"])
+        finally:
+            blog_data = {
+                "_id": str(document["_id"]),  # Use _id as the key since AllBlogsBlogPost uses alias="_id"
+                "comment_constraint": document["comment_constraint"],
+                "tags": document["tags"],
+                "number_of_views": document["number_of_views"],
+                "likes_count": document.get("likes_count", 0),  # Default to 0 for backward compatibility
+                "title": document["title"],
+                "content_preview": document["content"][:CONTENT_PREVIEW_LENGTH] + "..." if len(document["content"]) > 200 else document["content"],  # Create preview from content
+                "postedAt": document["postedAt"],
+                "post_image": document.get("post_image"),
+                "user_id": document.get("user_id"),
+                "user_display_name": user_data.username if user_data else "",
+                "user_image": user_data.profile_pic_url if user_data else "" 
+            }
+            blogs.append(AllBlogsBlogPost(**blog_data))
     return blogs
 
 
@@ -232,9 +285,14 @@ async def fetch_replies(parent_content_id: str): #uuid to str ,models.py -> blog
     async for reply in replies_cursor:
         reply_data = convert_mongo_doc_to_dict(reply)
         if reply_data:
-            # Add dummy user data (to be populated later with actual user service logic)
-            reply_data["user_display_name"] = "dummy_user"
-            reply_data["user_profile_image"] = "https://picsum.photos/50"
+                    # Inject data from keycloak
+            user_data = None
+            # Handle keycloak service errors as here the importance is serving the blog, not username or profile pic of author
+            try:
+                user_data = get_user_by_id(reply_data["user_id"])
+            finally:
+                reply_data["user_display_name"] = user_data.username if user_data else ""
+                reply_data["user_profile_image"] = user_data.profile_pic_url if user_data else ""
             reply_obj = ReplyBase(**reply_data)
             # Recursively fetch replies for each reply TODO: Any way to limit recursion depth or avoid recursion all together?
             reply_obj.replies = await fetch_replies(reply_obj.reply_id)
@@ -254,9 +312,14 @@ async def fetch_comments_and_replies(id: str):
     async for comment in comments_cursor:
         comment_data = convert_mongo_doc_to_dict(comment)
         if comment_data:
-            # Add dummy user data (to be populated later with actual user service logic)
-            comment_data["user_display_name"] = "dummy_user"
-            comment_data["user_profile_image"] = "https://picsum.photos/50"
+            # Inject data from keycloak
+            user_data = None
+            # Handle keycloak service errors as here the importance is serving the blog, not username or profile pic of author
+            try:
+                user_data = get_user_by_id(comment_data["user_id"])
+            finally:
+                comment_data["user_display_name"] = user_data.username if user_data else ""
+                comment_data["user_profile_image"] = user_data.profile_pic_url if user_data else ""
             comment_obj = CommentBase(**comment_data)
             # Fetch replies for each comment
             comment_obj.replies = await fetch_replies(comment_obj.comment_id)
@@ -283,9 +346,14 @@ async def update_Comment_Reply(id: str, text: str, user_id: str):
             updated_comment = await collection_comment.find_one({"_id": id})
             comment_data = convert_mongo_doc_to_dict(updated_comment)
             if comment_data:
-                # Add dummy user data (to be populated later with actual user service logic)
-                comment_data["user_display_name"] = "dummy_user"
-                comment_data["user_profile_image"] = "https://picsum.photos/50"
+                # Inject data from keycloak
+                user_data = None
+                # Handle keycloak service errors as here the importance is serving the blog, not username or profile pic of author
+                try:
+                    user_data = get_user_by_id(comment_data["user_id"])
+                finally:
+                    comment_data["user_display_name"] = user_data.username if user_data else ""
+                    comment_data["user_profile_image"] = user_data.profile_pic_url if user_data else ""
             return CommentBase(**comment_data) if comment_data else None
         raise HTTPException(400, "Comment update failed")
     
@@ -304,9 +372,14 @@ async def update_Comment_Reply(id: str, text: str, user_id: str):
             updated_reply = await collection_reply.find_one({"_id": id})
             reply_data = convert_mongo_doc_to_dict(updated_reply)
             if reply_data:
-                # Add dummy user data (to be populated later with actual user service logic)
-                reply_data["user_display_name"] = "dummy_user"
-                reply_data["user_profile_image"] = "https://picsum.photos/50"
+                # Inject data from keycloak
+                user_data = None
+                # Handle keycloak service errors as here the importance is serving the blog, not username or profile pic of author
+                try:
+                    user_data = get_user_by_id(reply_data["user_id"])
+                finally:
+                    reply_data["user_display_name"] = user_data.username if user_data else ""
+                    reply_data["user_profile_image"] = user_data.profile_pic_url if user_data else ""
             return ReplyBase(**reply_data) if reply_data else None
         raise HTTPException(400, "Reply update failed")
     

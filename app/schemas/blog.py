@@ -115,4 +115,4 @@ class LikeStatusResponse(BaseModel):
 
 class KeycloakUser(BaseModel):
     username: str
-    profile_pic_url: str = "Not Available"
+    profile_pic_url: str = ""

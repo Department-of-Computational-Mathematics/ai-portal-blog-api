@@ -70,6 +70,35 @@ def get_user_by_id(user_id: str) -> KeycloakUser:
         detail=f"Internal Server Error. Keycloak returned a {resp.status_code} - {resp.text} error"
     )
 
+def get_all_users_safely() -> list[KeycloakUser]:
+    """Fetch all users from Keycloak safely. No HTTPException is raised.
+
+    Returns:
+        list[KeycloakUser]: A list of KeycloakUser objects or an empty list if an error occurs.
+    """
+    try:
+        return get_all_users()
+    except HTTPException as e:
+        print(f"\nError fetching users from keycloak:\n{e}\n")
+        return []
+
+def get_user_by_id_safely(user_id: str, *, default_username: str = "", default_profile_pic_url: str = ""):
+    """Fetch a user by ID from Keycloak safely. No HTTPException is raised.
+
+    Args:
+        user_id (str): The ID of the user to fetch.
+        default_username (str, optional): The default username to return if the user is not found. Defaults to "".
+        default_profile_pic_url (str, optional): The default profile picture URL to return if the user is not found. Defaults to "".
+
+    Returns:
+        KeycloakUser: A KeycloakUser object or a user with default values if not found.
+    """
+    try:
+        return get_user_by_id(user_id)
+    except HTTPException as e:
+        print(f"\nError fetching user {user_id} from keycloak:\n{e}\n")
+        return KeycloakUser(username=default_username, profile_pic_url=default_profile_pic_url)
+
 
 if __name__ == "__main__":
     pprint(get_all_users())

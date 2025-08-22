@@ -1,7 +1,9 @@
 from typing import List, Union
 from fastapi import APIRouter, Query, Depends
 from app.schemas.blog import BlogPost, Comment, Reply, AllBlogsBlogPost, BlogPostWithUserData, CommentBase, ReplyBase, UpdateTextRequest, LikeRequest, LikeResponse, LikeStatusResponse
+from app.schemas.blog import KeycloakUser
 from app.services.blog import create_blog, delete_blog_by_id, delete_comment_reply, fetch_comments_and_replies, get_all_blogs, get_blog_by_id, get_blogs_byTags, reply_comment, update_Comment_Reply, update_blog, write_comment, toggle_like, check_user_like_status
+from app.services.keycloak import get_all_users, get_user_by_id
 from app.core.security import get_current_user_id
 
 router = APIRouter()
@@ -14,13 +16,25 @@ async def blog_service_health():
         "status": "healthy",
     }
 
+# NOTE: DO NOT turn these `keycloak` endpoints on in production. These can leak user information !!
+# ============================================
+@router.get("/keycloak-users", response_model=List[KeycloakUser], tags=["Keycloak"], summary="Get all Keycloak users")
+async def getAllUsers():
+    return get_all_users()
+
+
+@router.get("/keycloak-users/{user_id}", response_model=KeycloakUser, tags=["Keycloak"], summary="Get Keycloak user by ID")
+async def getUserByID(user_id: str):
+    return get_user_by_id(user_id)
+# ============================================
+
 # NOTE: All endpoints with `Authenticated` tag require `X-User-ID` header to be set with the user's ID.
 
 @router.get('/blogs', response_model=List[AllBlogsBlogPost], tags=["Blog", "Unauthenticated"], summary="Get all blogs")
 async def getAllBlogs():
     return await get_all_blogs()
 
-@router.get('/blogsByTags',response_model=List[AllBlogsBlogPost], tags=["Blog", "Unauthenticated"], summary="Get blogs by tags")
+@router.get('/blogsByTags', response_model=List[AllBlogsBlogPost], tags=["Blog", "Unauthenticated"], summary="Get blogs by tags")
 async def Blogs_By_tags(tags : List[str]=Query(..., description="List of tags")): #Query(..., description="List of tags") added to make get request correctly as it includes tag numbers 
     return await get_blogs_byTags(tags)
 

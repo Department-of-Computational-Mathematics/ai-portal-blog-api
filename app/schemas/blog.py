@@ -112,3 +112,7 @@ class LikeStatusResponse(BaseModel):
     liked_at: Optional[datetime] = None
 
 # NOTE: alias is input for serialization, serialization_alias is output for serialization.
+
+class KeycloakUser(BaseModel):
+    username: str
+    profile_pic_url: str = ""

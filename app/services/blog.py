@@ -36,7 +36,6 @@ async def get_blog_by_id(entity_id: str) -> BlogPostWithUserData: #data type cha
         # Convert MongoDB document to BlogPostWithUserData
         blog_data = convert_mongo_doc_to_dict(entity)
         if not blog_data:
-            print(f"Blog not found: {entity_id}")
             raise BlogNotFoundException(entity_id)
 
         # INFO: Design decision: current view is not considered for the view count. Idea is user want to know how many previous views

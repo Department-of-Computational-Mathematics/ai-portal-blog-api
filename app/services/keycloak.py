@@ -5,6 +5,7 @@ from pprint import pprint
 
 from app.core.config import settings
 from app.schemas.blog import KeycloakUser
+from app.core.exceptions import *
 
 async def get_keycloak_token() -> Optional[str]:
     async with httpx.AsyncClient() as client:
@@ -20,20 +21,14 @@ async def get_keycloak_token() -> Optional[str]:
         if resp.status_code == 200:
             return resp.json().get("access_token")
         if resp.status_code == 401:
-            raise HTTPException(
-                status_code=401,
-                detail="Unauthorized access - invalid client or credentials for keycloak"
-            )
+            raise KeycloakAuthenticationException()
         return None
 
 
 async def get_all_users() -> List[KeycloakUser]:
     token = await get_keycloak_token()
     if not token:
-        raise HTTPException(
-            status_code=401,
-            detail="Unauthorized access - empty token received from Keycloak"
-        )
+        raise KeycloakTokenException()
     async with httpx.AsyncClient() as client:
         resp = await client.get(
             f"{settings.KEYCLOAK_URL}/admin/realms/{settings.REALM}/users",
@@ -42,19 +37,13 @@ async def get_all_users() -> List[KeycloakUser]:
         )
         if resp.status_code == 200:
             return [KeycloakUser(**user) for user in resp.json()]
-        raise HTTPException(
-            status_code=500,
-            detail=f"Internal Server Error. Keycloak returned a {resp.status_code} - {resp.text} error"
-        )
+        raise KeycloakServiceException(resp.status_code, resp.text)
 
 
 async def get_user_by_id(user_id: str) -> KeycloakUser:
     token = await get_keycloak_token()
     if not token:
-        raise HTTPException(
-            status_code=401,
-            detail="Unauthorized access - empty token received from Keycloak"
-        )
+        raise KeycloakTokenException()
     async with httpx.AsyncClient() as client:
         resp = await client.get(
             f"{settings.KEYCLOAK_URL}/admin/realms/{settings.REALM}/users/{user_id}",
@@ -65,14 +54,8 @@ async def get_user_by_id(user_id: str) -> KeycloakUser:
             data = resp.json()
             return KeycloakUser(**data)
         if resp.status_code == 404:
-            raise HTTPException(
-                status_code=404,
-                detail=f"User not found with ID: {user_id}"
-            )
-        raise HTTPException(
-            status_code=500,
-            detail=f"Internal Server Error. Keycloak returned a {resp.status_code} - {resp.text} error"
-        )
+            raise KeycloakUserNotFoundException(user_id)
+        raise InternalServerException
 
 async def get_all_users_safely() -> List[KeycloakUser]:
     """Fetch all users from Keycloak safely. No HTTPException is raised.

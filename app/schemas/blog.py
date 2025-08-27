@@ -60,7 +60,6 @@ class BlogPostCreate(BaseModel):
     title: str
     content: str
     post_image: Optional[str] = None
-    user_id: Optional[str] = None
 
 # Input model for updating blogs (only editable fields)
 class BlogPostUpdate(BaseModel):

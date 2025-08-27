@@ -252,6 +252,14 @@ class KeycloakServiceException(BlogAPIException):
             detail=f"Internal Server Error. Keycloak returned a {status_code} - {detail} error"
         )
 
+class KeycloakUserNotFoundException(BlogAPIException):
+    def __init__(self, user_id: Optional[str] = None):
+        detail = f"User not found in Keycloak with ID: {user_id}" if user_id else "User not found in Keycloak"
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=detail
+        )
+
 class DatabaseException(BlogAPIException):
     def __init__(self, detail: str = "Database operation failed"):
         super().__init__(

@@ -37,8 +37,6 @@ async def get_blog_by_id(entity_id: str) -> BlogPostWithUserData: #data type cha
         blog_data = convert_mongo_doc_to_dict(entity)
         if not blog_data:
             raise BlogNotFoundException(entity_id)
-        # if blog_data is None:
-        #     raise HTTPException(status_code=404, detail=f"Blog with id {entity_id} not found")
 
         # INFO: Design decision: current view is not considered for the view count. Idea is user want to know how many previous views
         # Increment the number_of_views by 1
@@ -54,15 +52,13 @@ async def get_blog_by_id(entity_id: str) -> BlogPostWithUserData: #data type cha
         blog_data["user_first_name"] = user_data.firstName
         blog_data["user_last_name"] = user_data.lastName
         return BlogPostWithUserData(**blog_data)
-    
-    except HTTPException:
-        raise
+
     except Exception as e:
         print(f"An error occurred: {e}")
         raise InternalServerException
 
 
-async def create_blog(blog_input: BlogPostCreate) -> BlogPostWithUserData:
+async def create_blog(blog_input: BlogPostCreate, user_id: str) -> BlogPostWithUserData:
     # Create a full BlogPost with auto-generated ID and default values
     blog = BlogPost(
         comment_constraint=blog_input.comment_constraint,
@@ -70,7 +66,7 @@ async def create_blog(blog_input: BlogPostCreate) -> BlogPostWithUserData:
         title=blog_input.title,
         content=blog_input.content,
         post_image=blog_input.post_image,
-        user_id=blog_input.user_id,
+        user_id=user_id,
         number_of_views=0,  # Initialize to 0 for new blogs
         likes_count=0       # Initialize to 0 for new blogs
     )

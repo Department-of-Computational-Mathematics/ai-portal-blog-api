@@ -4,6 +4,7 @@ from bson import json_util
 from app.db.database import collection_blog, collection_comment, collection_reply, collection_like
 from app.schemas.blog import BlogPost, Comment, Reply, BlogPostWithUserData, AllBlogsBlogPost, CommentBase, ReplyBase, Like, BlogPostCreate, BlogPostUpdate, CommentCreate, ReplyCreate
 from app.services.keycloak import get_user_by_id_safely
+from app.core.exceptions import *
 from typing import List
 
 CONTENT_PREVIEW_LENGTH = 150  # Length of content preview for AllBlogsBlogPost
@@ -34,8 +35,10 @@ async def get_blog_by_id(entity_id: str) -> BlogPostWithUserData: #data type cha
 
         # Convert MongoDB document to BlogPostWithUserData
         blog_data = convert_mongo_doc_to_dict(entity)
-        if blog_data is None:
-            raise HTTPException(status_code=404, detail=f"Blog with id {entity_id} not found")
+        if not blog_data:
+            raise BlogNotFoundException(entity_id)
+        # if blog_data is None:
+        #     raise HTTPException(status_code=404, detail=f"Blog with id {entity_id} not found")
 
         # INFO: Design decision: current view is not considered for the view count. Idea is user want to know how many previous views
         # Increment the number_of_views by 1
@@ -56,7 +59,7 @@ async def get_blog_by_id(entity_id: str) -> BlogPostWithUserData: #data type cha
         raise
     except Exception as e:
         print(f"An error occurred: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise InternalServerException
 
 
 async def create_blog(blog_input: BlogPostCreate) -> BlogPostWithUserData:
@@ -85,18 +88,18 @@ async def create_blog(blog_input: BlogPostCreate) -> BlogPostWithUserData:
         blog_data["user_first_name"] = user_data.firstName
         blog_data["user_last_name"] = user_data.lastName
         return BlogPostWithUserData(**blog_data)
-    raise HTTPException(400, "Blog Insertion failed")
+    raise BlogInsertionException
 
 
 async def update_blog(blog_id: str, blog_update: BlogPostUpdate, user_id: str) -> BlogPostWithUserData:
     # First check if blog exists and user owns it
     old_blog = await collection_blog.find_one({"_id": blog_id})
     if not old_blog:
-        raise HTTPException(404, "Blog not found")
-    
+        raise BlogNotFoundException(blog_id)
+
     if old_blog["user_id"] != user_id:
-        raise HTTPException(403, "Permission denied. You can only edit your own blogs.")
-    
+        raise BlogOwnershipException
+
     # Only update the fields that users are allowed to modify
     update_data = {
         "title": blog_update.title,
@@ -116,7 +119,7 @@ async def update_blog(blog_id: str, blog_update: BlogPostUpdate, user_id: str) -
         # Convert to BlogPostWithUserData
         blog_data = convert_mongo_doc_to_dict(updated_blog)
         if blog_data is None:
-            raise HTTPException(400, "Blog update failed")
+            raise BlogUpdateException
         
         # Inject data from keycloak
         user_data = await get_user_by_id_safely(blog_data["user_id"])
@@ -125,8 +128,7 @@ async def update_blog(blog_id: str, blog_update: BlogPostUpdate, user_id: str) -
         blog_data["user_first_name"] = user_data.firstName
         blog_data["user_last_name"] = user_data.lastName
         return BlogPostWithUserData(**blog_data)
-    
-    raise HTTPException(400, "Blog update failed")
+    raise BlogUpdateException
 
 async def write_comment(comment_input: CommentCreate, user_id: str) -> CommentBase:
     # Create a full Comment with auto-generated ID and timestamp
@@ -141,8 +143,8 @@ async def write_comment(comment_input: CommentCreate, user_id: str) -> CommentBa
     # Check if the blog post exists before allowing comment
     blog_exists = await collection_blog.find_one({"_id": comment_dict["blogPost_id"]})
     if not blog_exists:
-        raise HTTPException(status_code=404, detail=f"Blog post with id {comment_dict['blogPost_id']} not found")
-    
+        raise BlogNotFoundException(comment_dict["blogPost_id"])
+
     result = await collection_comment.insert_one(comment_dict)
     if result.inserted_id:
         # Return the comment from database as CommentBase to match response model
@@ -156,7 +158,7 @@ async def write_comment(comment_input: CommentCreate, user_id: str) -> CommentBa
             comment_data["user_first_name"] = user_data.firstName
             comment_data["user_last_name"] = user_data.lastName
             return CommentBase(**comment_data)
-    raise HTTPException(400, "Comment Insertion failed")
+    raise CommentInsertionException
 
 
 async def reply_comment(reply_input: ReplyCreate, user_id: str):
@@ -175,8 +177,8 @@ async def reply_comment(reply_input: ReplyCreate, user_id: str):
         # If not found in comments, check in replies (for nested replies)
         parent_exists = await collection_reply.find_one({"_id": reply_dict["parentContent_id"]})
         if not parent_exists:
-            raise HTTPException(status_code=404, detail=f"Parent content with id {reply_dict['parentContent_id']} not found")
-    
+            raise ParentContentNotFoundException(reply_dict["parentContent_id"])
+
     result = await collection_reply.insert_one(reply_dict)
     if result.inserted_id:
         # Return the reply from database to match response model expectations
@@ -190,8 +192,7 @@ async def reply_comment(reply_input: ReplyCreate, user_id: str):
             reply_data["user_first_name"] = user_data.firstName
             reply_data["user_last_name"] = user_data.lastName
             return ReplyBase(**reply_data)
-        return None
-    raise HTTPException(400, "Reply Insertion failed")
+    raise ReplyInsertionException
 
 
 async def get_all_blogs() -> List[AllBlogsBlogPost]:
@@ -243,7 +244,7 @@ async def get_all_blogs() -> List[AllBlogsBlogPost]:
         }
         blogs.append(AllBlogsBlogPost(**blog_data))
     if len(blogs) == 0:
-        raise HTTPException(404, "No blogs found")
+        raise NoBlogsFoundException()
     return blogs
     
 
@@ -251,16 +252,16 @@ async def delete_blog_by_id(id: str, user_id: str) -> BlogPostWithUserData:
     # First check if blog exists and user owns it
     blog = await collection_blog.find_one({"_id": id})
     if not blog:
-        raise HTTPException(status_code=404, detail=f"Blog with id {id} not found")
-    
+        raise BlogNotFoundException(id)
+
     if blog["user_id"] != user_id:
-        raise HTTPException(status_code=403, detail="Permission denied. You can only delete your own blogs.")
-    
+        raise PermissionDeniedException()
+
     # Store blog data before deletion for return
     blog_data = convert_mongo_doc_to_dict(blog)
     if blog_data is None:
-        raise HTTPException(status_code=404, detail=f"Blog with id {id} not found")
-    
+        raise BlogDeletionException()
+
     # Inject data from keycloak
     user_data = await get_user_by_id_safely(blog_data["user_id"])
     blog_data["user_username"] = user_data.username
@@ -272,7 +273,7 @@ async def delete_blog_by_id(id: str, user_id: str) -> BlogPostWithUserData:
     
     result = await collection_blog.delete_one({'_id': id})
     if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail=f"Blog with id {id} not found")
+        raise BlogDeletionException()
     
     # Also delete all comments and replies associated with this blog
     await collection_comment.delete_many({"blogPost_id": id})
@@ -287,7 +288,7 @@ async def delete_blog_by_id(id: str, user_id: str) -> BlogPostWithUserData:
 async def get_blogs_byTags(tags : List[str]) -> List[AllBlogsBlogPost]:
     blogs=[]
     if await collection_blog.count_documents({"tags": {"$in": tags}}) == 0: # await added because httpException didnt work due to have no enough time to count.
-        raise HTTPException(status_code=404, detail="no blogs found with the given tags.")
+        raise BlogsByTagsNotFoundException(tags)
     cursor=collection_blog.find({"tags": {"$in": tags}}) 
     async for document in cursor: # added async
         # Inject data from keycloak
@@ -357,8 +358,8 @@ async def fetch_comments_and_replies(id: str):
             comments.append(comment_obj)
     
     if len(comments)==0 :
-        raise HTTPException(404, "No comments found")
-        
+        raise NoCommentsFoundException()
+
     return comments
 
 async def update_Comment_Reply(id: str, text: str, user_id: str):
@@ -367,7 +368,7 @@ async def update_Comment_Reply(id: str, text: str, user_id: str):
     if comment:
         # Check if user owns this comment
         if comment["user_id"] != user_id:
-            raise HTTPException(403, "Permission denied. You can only edit your own comments.")
+            raise ReplyOwnershipException()
         
         result = await collection_comment.update_one(
             {"_id": id},
@@ -384,16 +385,15 @@ async def update_Comment_Reply(id: str, text: str, user_id: str):
                 comment_data["user_first_name"] = user_data.firstName
                 comment_data["user_last_name"] = user_data.lastName
                 return CommentBase(**comment_data)
-            return None
-        raise HTTPException(400, "Comment update failed")
+        raise CommentUpdateException()
 
     # If it is not in comment collection, then search in reply collection
     reply = await collection_reply.find_one({"_id": id})
     if reply:
         # Check if user owns this reply
         if reply["user_id"] != user_id:
-            raise HTTPException(403, "Permission denied. You can only edit your own replies.")
-        
+            raise ReplyOwnershipException()
+
         result = await collection_reply.update_one(
             {"_id": id},
             {"$set": {"text": text}}
@@ -409,10 +409,9 @@ async def update_Comment_Reply(id: str, text: str, user_id: str):
                 reply_data["user_first_name"] = user_data.firstName
                 reply_data["user_last_name"] = user_data.lastName
                 return ReplyBase(**reply_data)
-            return None
-        raise HTTPException(400, "Reply update failed")
-    
-    raise HTTPException(404, "Comment or Reply not found")
+        raise ReplyUpdateException()
+
+    raise CommentOrReplyNotFoundException()
 
 
 async def delete_comment_reply(id: str, user_id: str):
@@ -421,14 +420,14 @@ async def delete_comment_reply(id: str, user_id: str):
     if comment:
         # Check if user owns this comment
         if comment["user_id"] != user_id:
-            raise HTTPException(403, "Permission denied. You can only delete your own comments.")
+            raise PermissionDeniedException()
         
         result = await collection_comment.delete_one({'_id': id})
         # Delete all replies associated with the comment
         await collection_reply.delete_many({'parentContent_id': id})
         
         if result.deleted_count == 0:
-            raise HTTPException(400, "Comment deletion failed")
+            raise CommentDeletionException()
         return {"message": "Comment and associated replies deleted successfully"}
     
     # If it is not in comment collection, then search in reply collection
@@ -436,17 +435,17 @@ async def delete_comment_reply(id: str, user_id: str):
     if reply:
         # Check if user owns this reply
         if reply["user_id"] != user_id:
-            raise HTTPException(403, "Permission denied. You can only delete your own replies.")
-        
+            raise PermissionDeniedException
+
         result = await collection_reply.delete_one({'_id': id})
         # Delete all replies associated with the reply (nested replies)
         await collection_reply.delete_many({'parentContent_id': id})
         
         if result.deleted_count == 0:
-            raise HTTPException(400, "Reply deletion failed")
+            raise ReplyDeletionException()
         return {"message": "Reply and nested replies deleted successfully"}
-    
-    raise HTTPException(404, "Comment or Reply not found")
+
+    raise CommentOrReplyNotFoundException()
 
 
 async def like_or_unlike(blog_id: str, user_id: str, like_value: int):
@@ -457,8 +456,8 @@ async def like_or_unlike(blog_id: str, user_id: str, like_value: int):
     # First check if blog exists
     blog = await collection_blog.find_one({"_id": blog_id})
     if not blog:
-        raise HTTPException(404, "Blog not found")
-    
+        raise BlogNotFoundException(blog_id)
+
     # Check if user has already liked this blog
     existing_like = await collection_like.find_one({"blog_id": blog_id, "user_id": user_id})
     
@@ -485,8 +484,7 @@ async def like_or_unlike(blog_id: str, user_id: str, like_value: int):
                 )
                 return {"message": "Blog liked successfully", "liked": True}
             else:
-                raise HTTPException(400, "Failed to like blog")
-    
+                raise BlogLikeException()
     elif like_value == 0:  # User wants to unlike the blog
         if existing_like:
             # Remove the like record
@@ -507,13 +505,13 @@ async def like_or_unlike(blog_id: str, user_id: str, like_value: int):
                 )
                 return {"message": "Blog unliked successfully", "liked": False}
             else:
-                raise HTTPException(400, "Failed to unlike blog")
+                raise BlogUnlikeException()
         else:
             # Already not liked - no action needed
             return {"message": "Blog not liked yet", "liked": False}
     
     else:
-        raise HTTPException(400, "Invalid like value. Use 0 to unlike or 1 to like")
+        raise InvalidLikeValueException()
 
 async def check_user_like_status(blog_id: str, user_id: str):
     """
@@ -523,8 +521,8 @@ async def check_user_like_status(blog_id: str, user_id: str):
     # First check if blog exists
     blog = await collection_blog.find_one({"_id": blog_id})
     if not blog:
-        raise HTTPException(404, "Blog not found")
-    
+        raise BlogNotFoundException(blog_id)
+
     # Check if user has liked this blog
     existing_like = await collection_like.find_one({"blog_id": blog_id, "user_id": user_id})
     

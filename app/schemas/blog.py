@@ -53,6 +53,23 @@ class BlogPost(BaseModel):
     post_image: Optional[str] = None
     user_id: Optional[str] = None
 
+# Input model for creating blogs (without ID - backend generates it)
+class BlogPostCreate(BaseModel):
+    comment_constraint: bool
+    tags: List[str]
+    title: str
+    content: str
+    post_image: Optional[str] = None
+    user_id: Optional[str] = None
+
+# Input model for updating blogs (only editable fields)
+class BlogPostUpdate(BaseModel):
+    comment_constraint: bool
+    tags: List[str]
+    title: str
+    content: str
+    post_image: Optional[str] = None
+
 class Comment(BaseModel):
     comment_id: str = Field(default_factory=lambda: str(uuid4()), alias="_id")
     user_id: Optional[str] = None
@@ -68,6 +85,18 @@ class Reply(BaseModel):
     text: str
     repliedAt: datetime = Field(default_factory=datetime.utcnow)
     replies: List['Reply'] = []
+
+# Input model for creating comments (without ID - backend generates it)
+class CommentCreate(BaseModel):
+    blogPost_id: str
+    text: str
+    # user_id: Optional[str] = None
+
+# Input model for creating replies (without ID - backend generates it)
+class ReplyCreate(BaseModel):
+    parentContent_id: str
+    text: str
+    # user_id: Optional[str] = None
 
 # Request models for updating content
 class UpdateTextRequest(BaseModel):
@@ -130,9 +159,15 @@ class KeycloakUser(BaseModel):
     # profilePicUrl is a nested field in Keycloak response. This function extracts it and puts it in the root, before pydantic parses the values.
     @model_validator(mode="before")
     def check_profile_pic_url(cls, values):
-        user_attributes = values.get("attributes", {})
-        if not user_attributes.get("profilePicUrl"):
-            raise ValueError("Missing profilePicUrl from Keycloak user attributes")
-        pic_in_list = user_attributes.get("profilePicUrl")
-        values["profilePicUrl"] = pic_in_list[0] if isinstance(pic_in_list, list) and pic_in_list else "" # Add profilePicUrl to values so Pydantic can validate/parse it. 
+        # Only extract from attributes if profilePicUrl is not already set
+        if not values.get("profilePicUrl"):
+            user_attributes = values.get("attributes", {})
+            if user_attributes and isinstance(user_attributes, dict):
+                pic_in_list = user_attributes.get("profilePicUrl")
+                if pic_in_list and isinstance(pic_in_list, list) and len(pic_in_list) > 0:
+                    values["profilePicUrl"] = pic_in_list[0]
+                else:
+                    values["profilePicUrl"] = ""
+            else:
+                values["profilePicUrl"] = ""
         return values

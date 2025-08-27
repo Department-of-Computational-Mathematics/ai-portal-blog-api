@@ -2,7 +2,7 @@ import json
 from fastapi import HTTPException
 from bson import json_util
 from app.db.database import collection_blog, collection_comment, collection_reply, collection_like
-from app.schemas.blog import BlogPost, Comment, Reply, BlogPostWithUserData, AllBlogsBlogPost, CommentBase, ReplyBase, Like
+from app.schemas.blog import BlogPost, Comment, Reply, BlogPostWithUserData, AllBlogsBlogPost, CommentBase, ReplyBase, Like, BlogPostCreate, BlogPostUpdate, CommentCreate, ReplyCreate
 from app.services.keycloak import get_user_by_id_safely
 from typing import List
 
@@ -45,7 +45,7 @@ async def get_blog_by_id(entity_id: str) -> BlogPostWithUserData: #data type cha
         )
         
         # Inject data from keycloak
-        user_data = get_user_by_id_safely(blog_data["user_id"])
+        user_data = await get_user_by_id_safely(blog_data["user_id"])
         blog_data["user_username"] = user_data.username
         blog_data["user_image_url"] = user_data.profilePicUrl
         blog_data["user_first_name"] = user_data.firstName
@@ -59,15 +59,27 @@ async def get_blog_by_id(entity_id: str) -> BlogPostWithUserData: #data type cha
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-async def create_blog(blog: BlogPost) -> BlogPostWithUserData:
-    blog_dict = blog.dict(by_alias=True) # added this part because dictionary data type should be used for insert_one as parametre
+async def create_blog(blog_input: BlogPostCreate) -> BlogPostWithUserData:
+    # Create a full BlogPost with auto-generated ID and default values
+    blog = BlogPost(
+        comment_constraint=blog_input.comment_constraint,
+        tags=blog_input.tags,
+        title=blog_input.title,
+        content=blog_input.content,
+        post_image=blog_input.post_image,
+        user_id=blog_input.user_id,
+        number_of_views=0,  # Initialize to 0 for new blogs
+        likes_count=0       # Initialize to 0 for new blogs
+    )
+    
+    blog_dict = blog.dict(by_alias=True) # Backend controls the ID generation
     result = await collection_blog.insert_one(blog_dict)
     if result.inserted_id:
         # Convert BlogPost to BlogPostWithUserData for response
         blog_data = blog.dict(by_alias=True)  # Use by_alias=True to get _id instead of blogPost_id
 
         # Inject data from keycloak
-        user_data = get_user_by_id_safely(blog_data["user_id"])
+        user_data = await get_user_by_id_safely(blog_data["user_id"])
         blog_data["user_username"] = user_data.username
         blog_data["user_image_url"] = user_data.profilePicUrl
         blog_data["user_first_name"] = user_data.firstName
@@ -76,36 +88,38 @@ async def create_blog(blog: BlogPost) -> BlogPostWithUserData:
     raise HTTPException(400, "Blog Insertion failed")
 
 
-async def update_blog(blog: BlogPost) -> BlogPostWithUserData:
-    blog_dict = blog.dict(by_alias=True) 
+async def update_blog(blog_id: str, blog_update: BlogPostUpdate, user_id: str) -> BlogPostWithUserData:
     # First check if blog exists and user owns it
-    old_blog = await collection_blog.find_one({"_id": blog_dict["_id"]}) #blogPost_id to _id , becaue in models.py ,"blogPost_id" changed to "_id" by  " alias="_id" "
+    old_blog = await collection_blog.find_one({"_id": blog_id})
     if not old_blog:
         raise HTTPException(404, "Blog not found")
     
-    if old_blog["user_id"] != blog_dict["user_id"]:
+    if old_blog["user_id"] != user_id:
         raise HTTPException(403, "Permission denied. You can only edit your own blogs.")
     
+    # Only update the fields that users are allowed to modify
+    update_data = {
+        "title": blog_update.title,
+        "content": blog_update.content,
+        "tags": blog_update.tags,
+        "comment_constraint": blog_update.comment_constraint,
+        "post_image": blog_update.post_image
+    }
+    
     result = await collection_blog.update_one(
-        {"_id": blog_dict["_id"]}, 
-        {"$set": {
-            "title": blog_dict["title"], 
-            "content": blog_dict["content"], 
-            "tags": blog_dict["tags"],
-            "comment_constraint": blog_dict.get("comment_constraint", False),  # Optional field
-            "postImage": blog_dict.get("post_image", None)  # Optional field
-        }}
+        {"_id": blog_id}, 
+        {"$set": update_data}
     )
 
     if result.modified_count == 1:
-        updated_blog = await collection_blog.find_one({"_id": blog_dict["_id"]})
+        updated_blog = await collection_blog.find_one({"_id": blog_id})
         # Convert to BlogPostWithUserData
         blog_data = convert_mongo_doc_to_dict(updated_blog)
         if blog_data is None:
             raise HTTPException(400, "Blog update failed")
         
         # Inject data from keycloak
-        user_data = get_user_by_id_safely(blog_data["user_id"])
+        user_data = await get_user_by_id_safely(blog_data["user_id"])
         blog_data["user_username"] = user_data.username
         blog_data["user_image_url"] = user_data.profilePicUrl
         blog_data["user_first_name"] = user_data.firstName
@@ -114,8 +128,15 @@ async def update_blog(blog: BlogPost) -> BlogPostWithUserData:
     
     raise HTTPException(400, "Blog update failed")
 
-async def write_comment(comment: Comment) -> CommentBase:
-    comment_dict = comment.dict(by_alias=True) # added this part because dictionary data type should be used for insert_one as parameter
+async def write_comment(comment_input: CommentCreate, user_id: str) -> CommentBase:
+    # Create a full Comment with auto-generated ID and timestamp
+    comment = Comment(
+        blogPost_id=comment_input.blogPost_id,
+        text=comment_input.text,
+        user_id=user_id
+    )
+    
+    comment_dict = comment.dict(by_alias=True) # Backend controls the ID generation
     
     # Check if the blog post exists before allowing comment
     blog_exists = await collection_blog.find_one({"_id": comment_dict["blogPost_id"]})
@@ -129,7 +150,7 @@ async def write_comment(comment: Comment) -> CommentBase:
         comment_data = convert_mongo_doc_to_dict(created_comment)
         if comment_data:
             # Inject data from keycloak
-            user_data = get_user_by_id_safely(comment_data["user_id"])
+            user_data = await get_user_by_id_safely(comment_data["user_id"])
             comment_data["user_username"] = user_data.username
             comment_data["user_image_url"] = user_data.profilePicUrl
             comment_data["user_first_name"] = user_data.firstName
@@ -138,8 +159,15 @@ async def write_comment(comment: Comment) -> CommentBase:
     raise HTTPException(400, "Comment Insertion failed")
 
 
-async def reply_comment(reply):
-    reply_dict = reply.dict(by_alias=True) # added this part because dictionary data type should be used for insert_one as parameter
+async def reply_comment(reply_input: ReplyCreate, user_id: str):
+    # Create a full Reply with auto-generated ID and timestamp
+    reply = Reply(
+        parentContent_id=reply_input.parentContent_id,
+        text=reply_input.text,
+        user_id=user_id
+    )
+    
+    reply_dict = reply.dict(by_alias=True) # Backend controls the ID generation
     
     # Check if the parent comment or reply exists before allowing reply
     parent_exists = await collection_comment.find_one({"_id": reply_dict["parentContent_id"]})
@@ -156,7 +184,7 @@ async def reply_comment(reply):
         reply_data = convert_mongo_doc_to_dict(created_reply)
         if reply_data:
             # Inject data from keycloak
-            user_data = get_user_by_id_safely(reply_data["user_id"])
+            user_data = await get_user_by_id_safely(reply_data["user_id"])
             reply_data["user_username"] = user_data.username
             reply_data["user_image_url"] = user_data.profilePicUrl
             reply_data["user_first_name"] = user_data.firstName
@@ -167,12 +195,35 @@ async def reply_comment(reply):
 
 
 async def get_all_blogs() -> List[AllBlogsBlogPost]:
+    import asyncio
     # function need to be async to use 'async for' loop
     blogs = []
+    user_data_cache = {}  # Cache user data to avoid duplicate requests
+    
     cursor = collection_blog.find({})
+    blog_list = []
     async for blog in cursor:
-        # Inject data from keycloak
-        user_data = get_user_by_id_safely(blog["user_id"])
+        blog_list.append(blog)
+    
+    # Extract unique user IDs
+    unique_user_ids = list(set(blog.get("user_id") for blog in blog_list if blog.get("user_id")))
+    
+    # Fetch user data in parallel
+    if unique_user_ids:
+        user_data_tasks = [get_user_by_id_safely(user_id) for user_id in unique_user_ids]
+        user_data_results = await asyncio.gather(*user_data_tasks)
+        
+        # Create cache mapping user_id to user_data
+        for user_id, user_data in zip(unique_user_ids, user_data_results):
+            user_data_cache[user_id] = user_data
+    
+    # Process blogs with cached user data
+    for blog in blog_list:
+        user_data = user_data_cache.get(blog.get("user_id"))
+        if not user_data:
+            # Fallback for missing user data
+            user_data = await get_user_by_id_safely(blog.get("user_id", ""))
+        
         # Convert BlogPost to AllBlogsBlogPost
         blog_data = {
             "_id": str(blog["_id"]),  # Use _id as the key since AllBlogsBlogPost uses alias="_id"
@@ -211,7 +262,7 @@ async def delete_blog_by_id(id: str, user_id: str) -> BlogPostWithUserData:
         raise HTTPException(status_code=404, detail=f"Blog with id {id} not found")
     
     # Inject data from keycloak
-    user_data = get_user_by_id_safely(blog_data["user_id"])
+    user_data = await get_user_by_id_safely(blog_data["user_id"])
     blog_data["user_username"] = user_data.username
     blog_data["user_image_url"] = user_data.profilePicUrl
     blog_data["user_first_name"] = user_data.firstName
@@ -240,7 +291,7 @@ async def get_blogs_byTags(tags : List[str]) -> List[AllBlogsBlogPost]:
     cursor=collection_blog.find({"tags": {"$in": tags}}) 
     async for document in cursor: # added async
         # Inject data from keycloak
-        user_data = get_user_by_id_safely(document["user_id"])
+        user_data = await get_user_by_id_safely(document["user_id"])
         # Convert BlogPost to AllBlogsBlogPost
         blog_data = {
             "_id": str(document["_id"]),  # Use _id as the key since AllBlogsBlogPost uses alias="_id"
@@ -269,7 +320,7 @@ async def fetch_replies(parent_content_id: str): #uuid to str ,models.py -> blog
         reply_data = convert_mongo_doc_to_dict(reply)
         if reply_data:
             # Inject data from keycloak
-            user_data = get_user_by_id_safely(reply_data["user_id"])
+            user_data = await get_user_by_id_safely(reply_data["user_id"])
             reply_data["user_username"] = user_data.username
             reply_data["user_image_url"] = user_data.profilePicUrl
             reply_data["user_first_name"] = user_data.firstName
@@ -295,7 +346,7 @@ async def fetch_comments_and_replies(id: str):
         comment_data = convert_mongo_doc_to_dict(comment)
         if comment_data:
             # Inject data from keycloak
-            user_data = get_user_by_id_safely(comment_data["user_id"])
+            user_data = await get_user_by_id_safely(comment_data["user_id"])
             comment_data["user_username"] = user_data.username
             comment_data["user_image_url"] = user_data.profilePicUrl
             comment_data["user_first_name"] = user_data.firstName
@@ -327,7 +378,7 @@ async def update_Comment_Reply(id: str, text: str, user_id: str):
             comment_data = convert_mongo_doc_to_dict(updated_comment)
             if comment_data:
                 # Inject data from keycloak
-                user_data = get_user_by_id_safely(comment_data["user_id"])
+                user_data = await get_user_by_id_safely(comment_data["user_id"])
                 comment_data["user_username"] = user_data.username
                 comment_data["user_image_url"] = user_data.profilePicUrl
                 comment_data["user_first_name"] = user_data.firstName
@@ -352,7 +403,7 @@ async def update_Comment_Reply(id: str, text: str, user_id: str):
             reply_data = convert_mongo_doc_to_dict(updated_reply)
             if reply_data:
                 # Inject data from keycloak
-                user_data = get_user_by_id_safely(reply_data["user_id"])
+                user_data = await get_user_by_id_safely(reply_data["user_id"])
                 reply_data["user_username"] = user_data.username
                 reply_data["user_image_url"] = user_data.profilePicUrl
                 reply_data["user_first_name"] = user_data.firstName
@@ -398,7 +449,7 @@ async def delete_comment_reply(id: str, user_id: str):
     raise HTTPException(404, "Comment or Reply not found")
 
 
-async def toggle_like(blog_id: str, user_id: str, like_value: int):
+async def like_or_unlike(blog_id: str, user_id: str, like_value: int):
     """
     Toggle like/unlike for a blog post.
     like_value: 0 to unlike, 1 to like

@@ -94,6 +94,41 @@ async def get_user_by_id_safely(user_id: str, *, default_username: str = "", def
             "lastName": default_last_name
         })
 
+async def check_keycloak_health() -> Dict:
+    """
+    Check Keycloak service health by attempting to get a token.
+    Returns health status with response time and additional metrics.
+    """
+    import time
+    
+    try:
+        start_time = time.time()
+        token = await get_keycloak_token()
+        response_time = round((time.time() - start_time) * 1000, 2)  # Convert to milliseconds
+        
+        if token:
+            return {
+                "status": "healthy",
+                "response_time_ms": response_time,
+                "authenticated": True,
+                "service": "keycloak"
+            }
+        else:
+            return {
+                "status": "unhealthy",
+                "response_time_ms": response_time,
+                "authenticated": False,
+                "service": "keycloak",
+                "error": "Failed to obtain token"
+            }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "response_time_ms": None,
+            "authenticated": False,
+            "service": "keycloak",
+            "error": str(e)
+        }
 
 if __name__ == "__main__":
     import asyncio

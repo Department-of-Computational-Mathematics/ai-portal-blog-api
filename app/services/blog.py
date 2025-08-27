@@ -1,11 +1,11 @@
 import json
 from fastapi import HTTPException
 from bson import json_util
-from app.db.database import collection_blog, collection_comment, collection_reply, collection_like
+from app.db.database import collection_blog, collection_comment, collection_reply, collection_like, database
 from app.schemas.blog import BlogPost, Comment, Reply, BlogPostWithUserData, AllBlogsBlogPost, CommentBase, ReplyBase, Like, BlogPostCreate, BlogPostUpdate, CommentCreate, ReplyCreate
 from app.services.keycloak import get_user_by_id_safely
 from app.core.exceptions import *
-from typing import List
+from typing import List, Dict
 
 CONTENT_PREVIEW_LENGTH = 150  # Length of content preview for AllBlogsBlogPost
 
@@ -530,3 +530,46 @@ async def check_user_like_status(blog_id: str, user_id: str):
         "like_id": str(existing_like["_id"]) if existing_like else None,
         "liked_at": existing_like.get("liked_at") if existing_like else None
     }
+
+async def check_database_health() -> Dict:
+    """
+    Check MongoDB database health by performing basic operations and collecting metrics.
+    Returns health status with response time and database metrics.
+    """
+    import time
+    
+    try:
+        start_time = time.time()
+        
+        # Test database connection by running a simple ping
+        await database.command("ping")
+        
+        # Get collection statistics
+        blogs_count = await collection_blog.count_documents({})
+        comments_count = await collection_comment.count_documents({})
+        replies_count = await collection_reply.count_documents({})
+        likes_count = await collection_like.count_documents({})
+        
+        # Calculate response time
+        response_time = round((time.time() - start_time) * 1000, 2)  # Convert to milliseconds
+        
+        return {
+            "status": "healthy",
+            "response_time_ms": response_time,
+            "service": "mongodb",
+            "metrics": {
+                "total_blogs": blogs_count,
+                "total_comments": comments_count,
+                "total_replies": replies_count,
+                "total_likes": likes_count,
+                "total_content_items": blogs_count + comments_count + replies_count
+            }
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "response_time_ms": None,
+            "service": "mongodb",
+            "error": str(e),
+            "metrics": None
+        }

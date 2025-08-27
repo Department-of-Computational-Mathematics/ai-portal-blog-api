@@ -1,6 +1,6 @@
 from typing import List, Union
 from fastapi import APIRouter, Query, Depends, status
-from app.schemas.blog import BlogPost, Comment, Reply, AllBlogsBlogPost, BlogPostWithUserData, CommentBase, ReplyBase, UpdateTextRequest, LikeRequest, LikeResponse, LikeStatusResponse, BlogPostCreate, BlogPostUpdate, CommentCreate, ReplyCreate
+from app.schemas.blog import BlogPost, Comment, Reply, AllBlogsBlogPost, BlogPostWithUserData, CommentBase, ReplyBase, UpdateTextRequest, LikeRequest, LikeResponse, LikeStatusResponse, BlogPostCreate, BlogPostUpdate, CommentCreate, ReplyCreate, HealthCheckResponse
 from app.schemas.blog import KeycloakUser
 from app.schemas.responses import (
     HEALTH_CHECK_RESPONSES, KEYCLOAK_USERS_LIST_RESPONSES, KEYCLOAK_USER_RESPONSES,
@@ -9,19 +9,105 @@ from app.schemas.responses import (
     COMMENTS_LIST_RESPONSES, COMMENT_CREATE_RESPONSES, REPLY_CREATE_RESPONSES,
     COMMENT_UPDATE_RESPONSES, COMMENT_DELETE_RESPONSES, LIKE_RESPONSES, LIKE_STATUS_RESPONSES
 )
-from app.services.blog import create_blog, delete_blog_by_id, delete_comment_reply, fetch_comments_and_replies, get_all_blogs, get_blog_by_id, get_blogs_byTags, reply_comment, update_Comment_Reply, update_blog, write_comment, like_or_unlike, check_user_like_status
-from app.services.keycloak import get_all_users, get_all_users_safely, get_user_by_id, get_user_by_id_safely
+from app.services.blog import create_blog, delete_blog_by_id, delete_comment_reply, fetch_comments_and_replies, get_all_blogs, get_blog_by_id, get_blogs_byTags, reply_comment, update_Comment_Reply, update_blog, write_comment, like_or_unlike, check_user_like_status, check_database_health
+from app.services.keycloak import get_all_users, get_all_users_safely, get_user_by_id, get_user_by_id_safely, check_keycloak_health
 from app.core.security import get_current_user_id
 
 router = APIRouter()
 
+@router.get("/ping", tags=["Health"], summary="Ping the service to check if it's alive")
+async def ping():
+    return {"message": "Pong. Hey I am alive!"}
+
 # Health check endpoint for blog service
-@router.get("/health", tags=["Health"], summary="Blog Service Health Check", responses=HEALTH_CHECK_RESPONSES)
+@router.get("/health", response_model=HealthCheckResponse, tags=["Health"], summary="Blog Service Health Check", responses=HEALTH_CHECK_RESPONSES)
 async def blog_service_health():
-    return {
-        "service": "blog-service",
-        "status": "up",
-    }
+    """
+    Comprehensive health check for the blog service.
+    
+    Checks:
+    - Keycloak authentication service connectivity and authentication capability
+    - MongoDB database connectivity and performance metrics
+    - Overall service response time and status
+    
+    Returns detailed health information including:
+    - Individual service status and response times  
+    - Database metrics (blog counts, comment counts, etc.)
+    - Authentication status
+    - Overall service health assessment
+    """
+    import time
+    from datetime import datetime
+    from app.schemas.blog import KeycloakHealth, DatabaseHealth
+    
+    start_time = time.time()
+    
+    try:
+        keycloak_health_raw = await check_keycloak_health()
+        keycloak_health = KeycloakHealth(**keycloak_health_raw)
+    except Exception as e:
+        keycloak_health = KeycloakHealth(
+            status="unhealthy",
+            response_time_ms=None,
+            service="keycloak", 
+            authenticated=False,
+            error=str(e)
+        )
+    
+    try:
+        database_health_raw = await check_database_health()
+        database_health = DatabaseHealth(**database_health_raw)
+    except Exception as e:
+        database_health = DatabaseHealth(
+            status="unhealthy",
+            response_time_ms=None,
+            service="mongodb",
+            error=str(e),
+            metrics=None
+        )
+    
+    # Calculate overall response time
+    overall_response_time = round((time.time() - start_time) * 1000, 2)
+    
+    # Determine overall health status
+    keycloak_healthy = keycloak_health.status == "healthy"
+    database_healthy = database_health.status == "healthy"
+    
+    if keycloak_healthy and database_healthy:
+        overall_status = "healthy"
+        status_code = status.HTTP_200_OK
+    elif database_healthy:  # Database is critical, if it's healthy but Keycloak isn't, we're degraded
+        overall_status = "degraded"
+        status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    else:  # Database is unhealthy, service is unhealthy
+        overall_status = "unhealthy"
+        status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    
+    # Calculate uptime from actual service start time
+    from app.core.service_tracker import get_uptime_info
+    uptime_info = get_uptime_info()
+    
+    health_response = HealthCheckResponse(
+        service="blog-service",
+        status=overall_status,
+        timestamp=datetime.utcnow(),
+        service_start_time=uptime_info.get("service_start_time"),
+        uptime_seconds=uptime_info.get("uptime_seconds"),
+        uptime_formatted=uptime_info.get("uptime_formatted"),
+        timezone=uptime_info.get("timezone", "GMT+5:30 (IST)"),
+        keycloak=keycloak_health,
+        database=database_health,
+        overall_response_time_ms=overall_response_time
+    )
+    
+    # Set response status code based on health
+    if overall_status != "healthy":
+        from fastapi import Response
+        response = Response()
+        response.status_code = status_code
+        return health_response
+    
+    return health_response
 
 # NOTE: DO NOT turn these `keycloak` endpoints on in production. These can leak user information !!
 # ============================================

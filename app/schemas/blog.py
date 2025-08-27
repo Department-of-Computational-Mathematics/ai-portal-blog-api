@@ -170,3 +170,35 @@ class KeycloakUser(BaseModel):
             else:
                 values["profilePicUrl"] = ""
         return values
+
+# Health Check Response Schema
+class ServiceHealth(BaseModel):
+    status: str  # "healthy" or "unhealthy"
+    response_time_ms: Optional[float] = None
+    service: str
+    error: Optional[str] = None
+
+class DatabaseMetrics(BaseModel):
+    total_blogs: int
+    total_comments: int  
+    total_replies: int
+    total_likes: int
+    total_content_items: int
+
+class DatabaseHealth(ServiceHealth):
+    metrics: Optional[DatabaseMetrics] = None
+
+class KeycloakHealth(ServiceHealth):
+    authenticated: bool
+
+class HealthCheckResponse(BaseModel):
+    service: str = "blog-service"
+    status: str  # "healthy", "degraded", or "unhealthy"
+    timestamp: datetime
+    service_start_time: Optional[str] = None
+    uptime_seconds: Optional[float] = None
+    uptime_formatted: Optional[str] = None
+    timezone: str = "GMT+5:30 (IST)"
+    keycloak: KeycloakHealth
+    database: DatabaseHealth
+    overall_response_time_ms: float

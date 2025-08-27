@@ -13,17 +13,17 @@ router = APIRouter()
 async def blog_service_health():
     return {
         "service": "blog-service",
-        "status": "healthy",
+        "status": "up",
     }
 
 # NOTE: DO NOT turn these `keycloak` endpoints on in production. These can leak user information !!
 # ============================================
-@router.get("/keycloak-users", response_model=List[KeycloakUser], tags=["Keycloak"], summary="Get all Keycloak users")
+@router.get("/keycloak-users", response_model=List[KeycloakUser], tags=["Keycloak"], summary="Get all Keycloak users", deprecated=True)
 async def getAllUsers():
     return get_all_users()
 
 
-@router.get("/keycloak-users/{user_id}", response_model=KeycloakUser, tags=["Keycloak"], summary="Get Keycloak user by ID")
+@router.get("/keycloak-users/{user_id}", response_model=KeycloakUser, tags=["Keycloak"], summary="Get Keycloak user by ID", deprecated=True)
 async def getUserByID(user_id: str):
     return get_user_by_id(user_id)
 # ============================================

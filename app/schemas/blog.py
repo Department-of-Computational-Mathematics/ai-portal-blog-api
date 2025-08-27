@@ -19,8 +19,10 @@ class BlogPostBase(BaseModel):
 class CommentBase(BaseModel):
     comment_id: str = Field(alias="_id", serialization_alias="comment_id")  # No default_factory, expects existing ID
     user_id: Optional[str] = None
-    user_display_name: Optional[str] = None
-    user_profile_image: Optional[str] = None
+    user_username: Optional[str] = None
+    user_image_url: Optional[str] = None
+    user_first_name: Optional[str] = None
+    user_last_name: Optional[str] = None
     blogPost_id: str
     text: str
     commentedAt: datetime
@@ -30,8 +32,10 @@ class ReplyBase(BaseModel):
     reply_id: str = Field(alias="_id", serialization_alias="reply_id")  # No default_factory, expects existing ID
     parentContent_id: str
     user_id: Optional[str] = None
-    user_display_name: Optional[str] = None
-    user_profile_image: Optional[str] = None
+    user_username: Optional[str] = None
+    user_image_url: Optional[str] = None
+    user_first_name: Optional[str] = None
+    user_last_name: Optional[str] = None
     text: str
     repliedAt: datetime
     replies: List['ReplyBase'] = []
@@ -81,8 +85,10 @@ class LikeRequest(BaseModel):
 
 # Response schemas extending base schemas
 class BlogPostWithUserData(BlogPostBase):
-    user_display_name: Optional[str]
-    user_image: Optional[str] = None
+    user_username: Optional[str]
+    user_image_url: Optional[str]
+    user_first_name: Optional[str]
+    user_last_name: Optional[str]
 
 class AllBlogsBlogPost(BaseModel): 
     blogPost_id: str = Field(alias="_id", serialization_alias="blog_id")  # No default_factory, expects existing ID
@@ -95,8 +101,10 @@ class AllBlogsBlogPost(BaseModel):
     postedAt: datetime
     post_image: Optional[str] = None
     user_id: Optional[str] = None
-    user_display_name: Optional[str]
-    user_image: Optional[str] = None
+    user_username: Optional[str] = None
+    user_image_url: Optional[str] = None
+    user_first_name: Optional[str] = None
+    user_last_name: Optional[str] = None
 
 # Response models for like endpoints
 class LikeResponse(BaseModel):

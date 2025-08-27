@@ -46,8 +46,10 @@ async def get_blog_by_id(entity_id: str) -> BlogPostWithUserData: #data type cha
         
         # Inject data from keycloak
         user_data = get_user_by_id_safely(blog_data["user_id"])
-        blog_data["user_display_name"] = user_data.username
-        blog_data["user_image"] = user_data.profile_pic_url
+        blog_data["user_username"] = user_data.username
+        blog_data["user_image_url"] = user_data.profilePicUrl
+        blog_data["user_first_name"] = user_data.firstName
+        blog_data["user_last_name"] = user_data.lastName
         return BlogPostWithUserData(**blog_data)
     
     except HTTPException:
@@ -57,7 +59,7 @@ async def get_blog_by_id(entity_id: str) -> BlogPostWithUserData: #data type cha
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-async def create_blog(blog) -> BlogPostWithUserData:
+async def create_blog(blog: BlogPost) -> BlogPostWithUserData:
     blog_dict = blog.dict(by_alias=True) # added this part because dictionary data type should be used for insert_one as parametre
     result = await collection_blog.insert_one(blog_dict)
     if result.inserted_id:
@@ -66,13 +68,15 @@ async def create_blog(blog) -> BlogPostWithUserData:
 
         # Inject data from keycloak
         user_data = get_user_by_id_safely(blog_data["user_id"])
-        blog_data["user_display_name"] = user_data.username
-        blog_data["user_image"] = user_data.profile_pic_url
+        blog_data["user_username"] = user_data.username
+        blog_data["user_image_url"] = user_data.profilePicUrl
+        blog_data["user_first_name"] = user_data.firstName
+        blog_data["user_last_name"] = user_data.lastName
         return BlogPostWithUserData(**blog_data)
     raise HTTPException(400, "Blog Insertion failed")
 
 
-async def update_blog(blog) -> BlogPostWithUserData:
+async def update_blog(blog: BlogPost) -> BlogPostWithUserData:
     blog_dict = blog.dict(by_alias=True) 
     # First check if blog exists and user owns it
     old_blog = await collection_blog.find_one({"_id": blog_dict["_id"]}) #blogPost_id to _id , becaue in models.py ,"blogPost_id" changed to "_id" by  " alias="_id" "
@@ -102,14 +106,15 @@ async def update_blog(blog) -> BlogPostWithUserData:
         
         # Inject data from keycloak
         user_data = get_user_by_id_safely(blog_data["user_id"])
-        blog_data["user_display_name"] = user_data.username
-        blog_data["user_image"] = user_data.profile_pic_url
+        blog_data["user_username"] = user_data.username
+        blog_data["user_image_url"] = user_data.profilePicUrl
+        blog_data["user_first_name"] = user_data.firstName
+        blog_data["user_last_name"] = user_data.lastName
         return BlogPostWithUserData(**blog_data)
     
     raise HTTPException(400, "Blog update failed")
 
-
-async def write_comment(comment):
+async def write_comment(comment: Comment) -> CommentBase:
     comment_dict = comment.dict(by_alias=True) # added this part because dictionary data type should be used for insert_one as parameter
     
     # Check if the blog post exists before allowing comment
@@ -125,10 +130,11 @@ async def write_comment(comment):
         if comment_data:
             # Inject data from keycloak
             user_data = get_user_by_id_safely(comment_data["user_id"])
-            comment_data["user_display_name"] = user_data.username
-            comment_data["user_profile_image"] = user_data.profile_pic_url
+            comment_data["user_username"] = user_data.username
+            comment_data["user_image_url"] = user_data.profilePicUrl
+            comment_data["user_first_name"] = user_data.firstName
+            comment_data["user_last_name"] = user_data.lastName
             return CommentBase(**comment_data)
-        return None
     raise HTTPException(400, "Comment Insertion failed")
 
 
@@ -151,8 +157,10 @@ async def reply_comment(reply):
         if reply_data:
             # Inject data from keycloak
             user_data = get_user_by_id_safely(reply_data["user_id"])
-            reply_data["user_display_name"] = user_data.username
-            reply_data["user_image"] = user_data.profile_pic_url
+            reply_data["user_username"] = user_data.username
+            reply_data["user_image_url"] = user_data.profilePicUrl
+            reply_data["user_first_name"] = user_data.firstName
+            reply_data["user_last_name"] = user_data.lastName
             return ReplyBase(**reply_data)
         return None
     raise HTTPException(400, "Reply Insertion failed")
@@ -177,8 +185,10 @@ async def get_all_blogs() -> List[AllBlogsBlogPost]:
             "postedAt": blog["postedAt"],
             "post_image": blog.get("post_image"),
             "user_id": blog.get("user_id"),
-            "user_display_name": user_data.username,
-            "user_image": user_data.profile_pic_url
+            "user_username": user_data.username,
+            "user_image_url": user_data.profilePicUrl,
+            "user_first_name": user_data.firstName,
+            "user_last_name": user_data.lastName
         }
         blogs.append(AllBlogsBlogPost(**blog_data))
     if len(blogs) == 0:
@@ -202,8 +212,10 @@ async def delete_blog_by_id(id: str, user_id: str) -> BlogPostWithUserData:
     
     # Inject data from keycloak
     user_data = get_user_by_id_safely(blog_data["user_id"])
-    blog_data["user_display_name"] = user_data.username
-    blog_data["user_image"] = user_data.profile_pic_url
+    blog_data["user_username"] = user_data.username
+    blog_data["user_image_url"] = user_data.profilePicUrl
+    blog_data["user_first_name"] = user_data.firstName
+    blog_data["user_last_name"] = user_data.lastName
 
     deleted_blog = BlogPostWithUserData(**blog_data)
     
@@ -241,8 +253,10 @@ async def get_blogs_byTags(tags : List[str]) -> List[AllBlogsBlogPost]:
             "postedAt": document["postedAt"],
             "post_image": document.get("post_image"),
             "user_id": document.get("user_id"),
-            "user_display_name": user_data.username,
-            "user_image": user_data.profile_pic_url 
+            "user_username": user_data.username,
+            "user_image_url": user_data.profilePicUrl,
+            "user_first_name": user_data.firstName,
+            "user_last_name": user_data.lastName
         }
         blogs.append(AllBlogsBlogPost(**blog_data))
     return blogs
@@ -256,10 +270,13 @@ async def fetch_replies(parent_content_id: str): #uuid to str ,models.py -> blog
         if reply_data:
             # Inject data from keycloak
             user_data = get_user_by_id_safely(reply_data["user_id"])
-            reply_data["user_display_name"] = user_data.username
-            reply_data["user_profile_image"] = user_data.profile_pic_url
+            reply_data["user_username"] = user_data.username
+            reply_data["user_image_url"] = user_data.profilePicUrl
+            reply_data["user_first_name"] = user_data.firstName
+            reply_data["user_last_name"] = user_data.lastName
             reply_obj = ReplyBase(**reply_data)
-            # Recursively fetch replies for each reply TODO: Any way to limit recursion depth or avoid recursion all together?
+            # Recursively fetch replies for each reply 
+            # TODO: Any way to limit recursion depth or avoid recursion all together?
             reply_obj.replies = await fetch_replies(reply_obj.reply_id)
             replies.append(reply_obj)
     
@@ -279,8 +296,10 @@ async def fetch_comments_and_replies(id: str):
         if comment_data:
             # Inject data from keycloak
             user_data = get_user_by_id_safely(comment_data["user_id"])
-            comment_data["user_display_name"] = user_data.username
-            comment_data["user_profile_image"] = user_data.profile_pic_url
+            comment_data["user_username"] = user_data.username
+            comment_data["user_image_url"] = user_data.profilePicUrl
+            comment_data["user_first_name"] = user_data.firstName
+            comment_data["user_last_name"] = user_data.lastName
             comment_obj = CommentBase(**comment_data)
             # Fetch replies for each comment
             comment_obj.replies = await fetch_replies(comment_obj.comment_id)
@@ -309,8 +328,10 @@ async def update_Comment_Reply(id: str, text: str, user_id: str):
             if comment_data:
                 # Inject data from keycloak
                 user_data = get_user_by_id_safely(comment_data["user_id"])
-                comment_data["user_display_name"] = user_data.username
-                comment_data["user_profile_image"] = user_data.profile_pic_url
+                comment_data["user_username"] = user_data.username
+                comment_data["user_image_url"] = user_data.profilePicUrl
+                comment_data["user_first_name"] = user_data.firstName
+                comment_data["user_last_name"] = user_data.lastName
                 return CommentBase(**comment_data)
             return None
         raise HTTPException(400, "Comment update failed")
@@ -332,8 +353,10 @@ async def update_Comment_Reply(id: str, text: str, user_id: str):
             if reply_data:
                 # Inject data from keycloak
                 user_data = get_user_by_id_safely(reply_data["user_id"])
-                reply_data["user_display_name"] = user_data.username
-                reply_data["user_profile_image"] = user_data.profile_pic_url
+                reply_data["user_username"] = user_data.username
+                reply_data["user_image_url"] = user_data.profilePicUrl
+                reply_data["user_first_name"] = user_data.firstName
+                reply_data["user_last_name"] = user_data.lastName
                 return ReplyBase(**reply_data)
             return None
         raise HTTPException(400, "Reply update failed")

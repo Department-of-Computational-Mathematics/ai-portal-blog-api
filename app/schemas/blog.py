@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from uuid import uuid4
 from typing import List, Optional
 from datetime import datetime
@@ -19,8 +19,10 @@ class BlogPostBase(BaseModel):
 class CommentBase(BaseModel):
     comment_id: str = Field(alias="_id", serialization_alias="comment_id")  # No default_factory, expects existing ID
     user_id: Optional[str] = None
-    user_display_name: Optional[str] = None
-    user_profile_image: Optional[str] = None
+    user_username: Optional[str] = None
+    user_image_url: Optional[str] = None
+    user_first_name: Optional[str] = None
+    user_last_name: Optional[str] = None
     blogPost_id: str
     text: str
     commentedAt: datetime
@@ -30,8 +32,10 @@ class ReplyBase(BaseModel):
     reply_id: str = Field(alias="_id", serialization_alias="reply_id")  # No default_factory, expects existing ID
     parentContent_id: str
     user_id: Optional[str] = None
-    user_display_name: Optional[str] = None
-    user_profile_image: Optional[str] = None
+    user_username: Optional[str] = None
+    user_image_url: Optional[str] = None
+    user_first_name: Optional[str] = None
+    user_last_name: Optional[str] = None
     text: str
     repliedAt: datetime
     replies: List['ReplyBase'] = []
@@ -49,6 +53,22 @@ class BlogPost(BaseModel):
     post_image: Optional[str] = None
     user_id: Optional[str] = None
 
+# Input model for creating blogs (without ID - backend generates it)
+class BlogPostCreate(BaseModel):
+    comment_constraint: bool
+    tags: List[str]
+    title: str
+    content: str
+    post_image: Optional[str] = None
+
+# Input model for updating blogs (only editable fields)
+class BlogPostUpdate(BaseModel):
+    comment_constraint: bool
+    tags: List[str]
+    title: str
+    content: str
+    post_image: Optional[str] = None
+
 class Comment(BaseModel):
     comment_id: str = Field(default_factory=lambda: str(uuid4()), alias="_id")
     user_id: Optional[str] = None
@@ -64,6 +84,18 @@ class Reply(BaseModel):
     text: str
     repliedAt: datetime = Field(default_factory=datetime.utcnow)
     replies: List['Reply'] = []
+
+# Input model for creating comments (without ID - backend generates it)
+class CommentCreate(BaseModel):
+    blogPost_id: str
+    text: str
+    # user_id: Optional[str] = None
+
+# Input model for creating replies (without ID - backend generates it)
+class ReplyCreate(BaseModel):
+    parentContent_id: str
+    text: str
+    # user_id: Optional[str] = None
 
 # Request models for updating content
 class UpdateTextRequest(BaseModel):
@@ -81,8 +113,10 @@ class LikeRequest(BaseModel):
 
 # Response schemas extending base schemas
 class BlogPostWithUserData(BlogPostBase):
-    user_display_name: Optional[str]
-    user_image: Optional[str] = None
+    user_username: Optional[str]
+    user_image_url: Optional[str]
+    user_first_name: Optional[str]
+    user_last_name: Optional[str]
 
 class AllBlogsBlogPost(BaseModel): 
     blogPost_id: str = Field(alias="_id", serialization_alias="blog_id")  # No default_factory, expects existing ID
@@ -95,8 +129,10 @@ class AllBlogsBlogPost(BaseModel):
     postedAt: datetime
     post_image: Optional[str] = None
     user_id: Optional[str] = None
-    user_display_name: Optional[str]
-    user_image: Optional[str] = None
+    user_username: Optional[str] = None
+    user_image_url: Optional[str] = None
+    user_first_name: Optional[str] = None
+    user_last_name: Optional[str] = None
 
 # Response models for like endpoints
 class LikeResponse(BaseModel):
@@ -115,4 +151,54 @@ class LikeStatusResponse(BaseModel):
 
 class KeycloakUser(BaseModel):
     username: str
-    profile_pic_url: str = ""
+    profilePicUrl: str = ""
+    firstName: str
+    lastName: str
+
+    # profilePicUrl is a nested field in Keycloak response. This function extracts it and puts it in the root, before pydantic parses the values.
+    @model_validator(mode="before")
+    def check_profile_pic_url(cls, values):
+        # Only extract from attributes if profilePicUrl is not already set
+        if not values.get("profilePicUrl"):
+            user_attributes = values.get("attributes", {})
+            if user_attributes and isinstance(user_attributes, dict):
+                pic_in_list = user_attributes.get("profilePicUrl")
+                if pic_in_list and isinstance(pic_in_list, list) and len(pic_in_list) > 0:
+                    values["profilePicUrl"] = pic_in_list[0]
+                else:
+                    values["profilePicUrl"] = ""
+            else:
+                values["profilePicUrl"] = ""
+        return values
+
+# Health Check Response Schema
+class ServiceHealth(BaseModel):
+    status: str  # "healthy" or "unhealthy"
+    response_time_ms: Optional[float] = None
+    service: str
+    error: Optional[str] = None
+
+class DatabaseMetrics(BaseModel):
+    total_blogs: int
+    total_comments: int  
+    total_replies: int
+    total_likes: int
+    total_content_items: int
+
+class DatabaseHealth(ServiceHealth):
+    metrics: Optional[DatabaseMetrics] = None
+
+class KeycloakHealth(ServiceHealth):
+    authenticated: bool
+
+class HealthCheckResponse(BaseModel):
+    service: str = "blog-service"
+    status: str  # "healthy", "degraded", or "unhealthy"
+    timestamp: datetime
+    service_start_time: Optional[str] = None
+    uptime_seconds: Optional[float] = None
+    uptime_formatted: Optional[str] = None
+    timezone: str = "GMT+5:30 (IST)"
+    keycloak: KeycloakHealth
+    database: DatabaseHealth
+    overall_response_time_ms: float

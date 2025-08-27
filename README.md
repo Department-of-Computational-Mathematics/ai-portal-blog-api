@@ -16,12 +16,15 @@ app/
 ├── core/                  # Core application code
 │   ├── __init__.py
 │   ├── security.py       # Security utilities (Authentication)
+│   ├── exceptions.py     # Custom exception classes for HTTP exceptions
+│   ├── service_tracker.py       # Service tracking utilities
 │   └── config.py         # Application configuration
 ├── db/                    # Database
 │   ├── __init__.py
 │   └── database.py       # MongoDB connection
 ├── schemas/              # Pydantic models
 │   ├── __init__.py
+│   ├── responses.py     # HTTP responses for swagger docs
 │   └── blog.py          # Blog schemas
 ├── services/            # Business logic
 │   ├── __init__.py
@@ -71,7 +74,7 @@ To deploy the application as a service, you can use a process manager like `syst
 2. Create a service file:
 
     ```bash
-    sudo nano /etc/systemd/system/ai-blog-be.service
+    sudo nano /etc/systemd/system/ai-blogs-be.service
     ```
 
 3. Add the following configuration:
@@ -100,14 +103,38 @@ To deploy the application as a service, you can use a process manager like `syst
 4. Start and enable the service:
 
     ```bash
-    sudo systemctl start blog-api
-    sudo systemctl enable blog-api
+    sudo systemctl start ai-blogs-be
+    sudo systemctl enable ai-blogs-be
     ```
 
 5. Restart the service:
 
     ```bash
-    sudo systemctl restart ai-blog-be
+    sudo systemctl restart ai-blogs-be
+    ```
+
+6. Stop the service:
+
+    ```bash
+    sudo systemctl stop ai-blogs-be
+    ```
+
+7. View logs:
+
+    ```bash
+    sudo journalctl -u ai-blogs-be
+    ```
+
+8. View service status
+
+    ```bash
+    sudo systemctl status ai-blogs-be
+    ```
+
+9. View all running services
+
+    ```bash
+    sudo systemctl list-units --type=service --state=running
     ```
 
 ## API Documentation

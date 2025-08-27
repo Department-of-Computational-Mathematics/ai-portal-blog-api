@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from uuid import uuid4
 from typing import List, Optional
 from datetime import datetime
@@ -115,4 +115,16 @@ class LikeStatusResponse(BaseModel):
 
 class KeycloakUser(BaseModel):
     username: str
-    profile_pic_url: str = ""
+    profilePicUrl: str = ""
+    firstName: str
+    lastName: str
+
+    # profilePicUrl is a nested field in Keycloak response. This function extracts it and puts it in the root, before pydantic parses the values.
+    @model_validator(mode="before")
+    def check_profile_pic_url(cls, values):
+        user_attributes = values.get("attributes", {})
+        if not user_attributes.get("profilePicUrl"):
+            raise ValueError("Missing profilePicUrl from Keycloak user attributes")
+        pic_in_list = user_attributes.get("profilePicUrl")
+        values["profilePicUrl"] = pic_in_list[0] if isinstance(pic_in_list, list) and pic_in_list else "" # Add profilePicUrl to values so Pydantic can validate/parse it. 
+        return values

@@ -82,7 +82,7 @@ def get_all_users_safely() -> list[KeycloakUser]:
         print(f"\nError fetching users from keycloak:\n{e}\n")
         return []
 
-def get_user_by_id_safely(user_id: str, *, default_username: str = "", default_profile_pic_url: str = ""):
+def get_user_by_id_safely(user_id: str, *, default_username: str = "", default_profile_pic_url: str = "", default_first_name: str = "", default_last_name: str = "") -> KeycloakUser:
     """Fetch a user by ID from Keycloak safely. No HTTPException is raised.
 
     Args:
@@ -97,7 +97,7 @@ def get_user_by_id_safely(user_id: str, *, default_username: str = "", default_p
         return get_user_by_id(user_id)
     except HTTPException as e:
         print(f"\nError fetching user {user_id} from keycloak:\n{e}\n")
-        return KeycloakUser(username=default_username, profile_pic_url=default_profile_pic_url)
+        return KeycloakUser(username=default_username, profilePicUrl=default_profile_pic_url, firstName=default_first_name, lastName=default_last_name)
 
 
 if __name__ == "__main__":

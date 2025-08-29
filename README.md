@@ -70,6 +70,7 @@ To deploy the application as a service, you can use a process manager like `syst
 1. Ensure the application is cloned to `/opt/`:
 
     Assume it is located at `/opt/ai-portal-blog-api/` after git clone.
+    Follow the step 1 and step 2 of the Setup(local development) section above first.
 
 2. Create a service file:
 

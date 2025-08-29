@@ -1,5 +1,5 @@
 from typing import List, Union
-from fastapi import APIRouter, Query, Depends, status
+from fastapi import APIRouter, Query, Depends, status, Request, Response
 from app.schemas.blog import BlogPost, Comment, Reply, AllBlogsBlogPost, BlogPostWithUserData, CommentBase, ReplyBase, UpdateTextRequest, LikeRequest, LikeResponse, LikeStatusResponse, BlogPostCreate, BlogPostUpdate, CommentCreate, ReplyCreate, HealthCheckResponse
 from app.schemas.blog import KeycloakUser
 from app.schemas.responses import (
@@ -9,8 +9,9 @@ from app.schemas.responses import (
     COMMENTS_LIST_RESPONSES, COMMENT_CREATE_RESPONSES, REPLY_CREATE_RESPONSES,
     COMMENT_UPDATE_RESPONSES, COMMENT_DELETE_RESPONSES, LIKE_RESPONSES, LIKE_STATUS_RESPONSES
 )
-from app.services.blog import create_blog, delete_blog_by_id, delete_comment_reply, fetch_comments_and_replies, get_all_blogs, get_blog_by_id, get_blogs_byTags, reply_comment, update_Comment_Reply, update_blog, write_comment, like_or_unlike, check_user_like_status, check_database_health
-from app.services.keycloak import get_all_users, get_all_users_safely, get_user_by_id, get_user_by_id_safely, check_keycloak_health
+from app.services.blog import create_blog, delete_blog_by_id, delete_comment_reply, fetch_comments_and_replies, get_all_blogs, get_blog_by_id, get_blogs_byTags, reply_comment, update_Comment_Reply, update_blog, write_comment, like_or_unlike, check_user_like_status
+from app.services.keycloak import get_all_users, get_all_users_safely, get_user_by_id, get_user_by_id_safely
+from app.services.status import get_comprehensive_health_check, get_request_headers_debug, get_auth_debug_info, get_system_info, is_debug_endpoint_enabled
 from app.core.security import get_current_user_id
 
 router = APIRouter()
@@ -36,73 +37,12 @@ async def blog_service_health():
     - Authentication status
     - Overall service health assessment
     """
-    import time
-    from datetime import datetime
-    from app.schemas.blog import KeycloakHealth, DatabaseHealth
-    
-    start_time = time.time()
-    
-    try:
-        keycloak_health_raw = await check_keycloak_health()
-        keycloak_health = KeycloakHealth(**keycloak_health_raw)
-    except Exception as e:
-        keycloak_health = KeycloakHealth(
-            status="unhealthy",
-            response_time_ms=None,
-            service="keycloak", 
-            authenticated=False,
-            error=str(e)
-        )
-    
-    try:
-        database_health_raw = await check_database_health()
-        database_health = DatabaseHealth(**database_health_raw)
-    except Exception as e:
-        database_health = DatabaseHealth(
-            status="unhealthy",
-            response_time_ms=None,
-            service="mongodb",
-            error=str(e),
-            metrics=None
-        )
-    
-    # Calculate overall response time
-    overall_response_time = round((time.time() - start_time) * 1000, 2)
-    
-    # Determine overall health status
-    keycloak_healthy = keycloak_health.status == "healthy"
-    database_healthy = database_health.status == "healthy"
-    
-    if keycloak_healthy and database_healthy:
-        overall_status = "healthy"
-        status_code = status.HTTP_200_OK
-    elif database_healthy:  # Database is critical, if it's healthy but Keycloak isn't, we're degraded
-        overall_status = "degraded"
-        status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-    else:  # Database is unhealthy, service is unhealthy
-        overall_status = "unhealthy"
-        status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-    
-    # Calculate uptime from actual service start time
-    from app.core.service_tracker import get_uptime_info
-    uptime_info = get_uptime_info()
-    
-    health_response = HealthCheckResponse(
-        service="blog-service",
-        status=overall_status,
-        timestamp=datetime.utcnow(),
-        service_start_time=uptime_info.get("service_start_time"),
-        uptime_seconds=uptime_info.get("uptime_seconds"),
-        uptime_formatted=uptime_info.get("uptime_formatted"),
-        timezone=uptime_info.get("timezone", "GMT+5:30 (IST)"),
-        keycloak=keycloak_health,
-        database=database_health,
-        overall_response_time_ms=overall_response_time
-    )
+    health_result = await get_comprehensive_health_check()
+    health_response = health_result["health_response"]
+    status_code = health_result["status_code"]
     
     # Set response status code based on health
-    if overall_status != "healthy":
-        from fastapi import Response
+    if status_code != 200:
         response = Response()
         response.status_code = status_code
         return health_response
@@ -111,16 +51,75 @@ async def blog_service_health():
 
 # NOTE: DO NOT turn these `keycloak` endpoints on in production. These can leak user information !!
 # ============================================
-@router.get("/keycloak-users", response_model=List[KeycloakUser], tags=["Keycloak"], summary="Get all Keycloak users", deprecated=True, responses=KEYCLOAK_USERS_LIST_RESPONSES)
+@router.get("/debug/keycloak-users", response_model=List[KeycloakUser], tags=["Debug"], summary="Get all Keycloak users", responses=KEYCLOAK_USERS_LIST_RESPONSES)
 async def getAllUsers():
     # Do not use the safe functions here. We want to check for errors when debugging. 
     return await get_all_users()
 
 
-@router.get("/keycloak-users/{user_id}", response_model=KeycloakUser, tags=["Keycloak"], summary="Get Keycloak user by ID", deprecated=True, responses=KEYCLOAK_USER_RESPONSES)
+@router.get("/debug/keycloak-users/{user_id}", response_model=KeycloakUser, tags=["Debug"], summary="Get Keycloak user by ID", responses=KEYCLOAK_USER_RESPONSES)
 async def getUserByID(user_id: str):
     # Do not use the safe functions here. We want to check for errors when debugging.
     return await get_user_by_id(user_id)
+
+# Debug endpoints for header inspection and authentication verification
+# NOTE: These endpoints should be disabled in production for security reasons
+
+@router.get("/debug/headers", tags=["Debug"], summary="Get all request headers for debugging")
+async def get_request_headers(request: Request):
+    """
+    Debug endpoint to inspect all incoming request headers.
+    Useful for verifying nginx gateway is properly setting authentication headers.
+    
+    Returns all headers including:
+    - X-User-ID (set by nginx after authentication)
+    - Authorization headers
+    - Other custom headers from the gateway
+    
+    NOTE: This endpoint should be disabled in production for security reasons.
+    """
+    if not is_debug_endpoint_enabled():
+        return {"error": "Debug endpoints are disabled in this environment"}
+    
+    return await get_request_headers_debug(request)
+
+
+@router.get("/debug/auth-info", tags=["Debug"], summary="Get authentication info from headers")
+async def get_auth_info(request: Request, current_user_id: str = Depends(get_current_user_id)):
+    """
+    Debug endpoint to verify authentication flow and user ID extraction.
+    
+    Shows:
+    - Raw X-User-ID header value
+    - Processed current_user_id from dependency
+    - Header extraction success/failure
+    - Authentication flow validation
+    
+    NOTE: This endpoint should be disabled in production for security reasons.
+    """
+    if not is_debug_endpoint_enabled():
+        return {"error": "Debug endpoints are disabled in this environment"}
+    
+    return await get_auth_debug_info(request, current_user_id)
+
+
+@router.get("/debug/system-info", tags=["Debug"], summary="Get system information")
+async def get_system_information():
+    """
+    Debug endpoint to get general system information.
+    
+    Returns:
+    - Environment information
+    - Service uptime and version
+    - System configuration
+    
+    NOTE: This endpoint should be disabled in production for security reasons.
+    """
+    if not is_debug_endpoint_enabled():
+        return {"error": "Debug endpoints are disabled in this environment"}
+    
+    return await get_system_info()
+
 # ============================================
 
 # NOTE: All endpoints with `Authenticated` tag require `X-User-ID` header to be set with the user's ID.
@@ -191,4 +190,3 @@ async def getUserLikeStatus(blog_id: str, current_user_id: str = Depends(get_cur
     Returns like status, total likes count, and like details if applicable.
     """
     return await check_user_like_status(blog_id, current_user_id)
-

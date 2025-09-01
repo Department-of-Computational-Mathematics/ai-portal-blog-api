@@ -4,6 +4,7 @@ import os
 
 class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
+    SERVICE_STR: str = "/blogs"
     PROJECT_NAME: str = "Blog API"
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:3000",

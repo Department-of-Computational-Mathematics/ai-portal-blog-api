@@ -6,7 +6,7 @@ from app.core.service_tracker import initialize_service_start_time
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json"
+    openapi_url=f"{settings.API_V1_STR}{settings.SERVICE_STR}/openapi.json"
 )
 
 # Initialize service start time tracking

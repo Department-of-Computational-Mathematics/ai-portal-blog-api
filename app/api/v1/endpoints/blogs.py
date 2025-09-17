@@ -124,15 +124,15 @@ async def get_system_information():
 
 # NOTE: All endpoints with `Authenticated` tag require `X-User-ID` header to be set with the user's ID.
 
-@router.get('/blogs', response_model=List[AllBlogsBlogPost], tags=["Blog", "Unauthenticated"], summary="Get all blogs", responses=BLOGS_LIST_RESPONSES)
+@router.get('/public/blogs', response_model=List[AllBlogsBlogPost], tags=["Blog", "Unauthenticated"], summary="Get all blogs", responses=BLOGS_LIST_RESPONSES)
 async def getAllBlogs():
     return await get_all_blogs()
 
-@router.get('/blogsByTags', response_model=List[AllBlogsBlogPost], tags=["Blog", "Unauthenticated"], summary="Get blogs by tags", responses=BLOGS_BY_TAGS_RESPONSES)
-async def Blogs_By_tags(tags : List[str]=Query(..., description="List of tags")): #Query(..., description="List of tags") added to make get request correctly as it includes tag numbers 
+@router.get('/public/blogsByTags', response_model=List[AllBlogsBlogPost], tags=["Blog", "Unauthenticated"], summary="Get blogs by tags", responses=BLOGS_BY_TAGS_RESPONSES)
+async def Blogs_By_tags(tags : List[str]=Query(..., description="List of tags")): #Query(..., description="List of tags") added to make get request correctly as it includes tag numbers
     return await get_blogs_byTags(tags)
 
-@router.get("/blog/{blog_id}", response_model=BlogPostWithUserData ,tags=["Blog", "Unauthenticated"], summary="Get Blog by ID", responses=BLOG_GET_RESPONSES)
+@router.get("/public/blog/{blog_id}", response_model=BlogPostWithUserData ,tags=["Blog", "Unauthenticated"], summary="Get Blog by ID", responses=BLOG_GET_RESPONSES)
 async def get_blog_by_blog_id(blog_id: str): #data type change from int to str
     blog = await get_blog_by_id(blog_id) #{"p_id": blog_id} => blog_id -function parameter error,parameter was not in format used in get_blog_by_id()
     return blog
@@ -151,7 +151,7 @@ async def updateBlog(id: str, blog: BlogPostUpdate, current_user_id: str = Depen
 async def deleteBlog(id: str, current_user_id: str = Depends(get_current_user_id)):
     return await delete_blog_by_id(id, current_user_id)
 
-@router.get('/blog/{id}/comments', response_model=List[CommentBase], tags=["Blog-Comment", "Unauthenticated"], summary="Get all comments and replies for a blog post", responses=COMMENTS_LIST_RESPONSES)
+@router.get('/public/blog/{id}/comments', response_model=List[CommentBase], tags=["Blog-Comment", "Unauthenticated"], summary="Get all comments and replies for a blog post", responses=COMMENTS_LIST_RESPONSES)
 async def get_comments_and_replies(id:str):
     return await fetch_comments_and_replies(id)
 

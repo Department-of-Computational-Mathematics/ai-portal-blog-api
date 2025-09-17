@@ -7,10 +7,9 @@ class Settings(BaseSettings):
     SERVICE_STR: str = "/blogs"
     PROJECT_NAME: str = "Blog API"
     BACKEND_CORS_ORIGINS: List[str] = [
+        "*",
         "http://localhost:3000",
         "https://localhost:3000",
-        "https://aistudentchapter.lk/", # for CORS error https://github.com/Department-of-Computational-Mathematics/ai-portal-blog-api/issues/34
-        "http://aistudentchapter.lk/"   # for CORS error https://github.com/Department-of-Computational-Mathematics/ai-portal-blog-api/issues/34
     ]
     
     # Database settings
